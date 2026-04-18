@@ -1,4 +1,3 @@
-// QUESTA RIGA È MAGICA: Forza Vercel ad aspettare fino a 60 secondi invece di 10!
 export const maxDuration = 60; 
 
 import { NextResponse } from 'next/server';
@@ -19,35 +18,37 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const base64Data = buffer.toString('base64');
-
     const genAI = new GoogleGenerativeAI(apiKey.trim());
     const pdfPart = { inlineData: { data: base64Data, mimeType: "application/pdf" } };
 
+    // FASE 1: Individuazione capitoli e PAGINE
     if (action === 'outline') {
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
       const promptOutline = `
-        Analizza l'intero documento e identifica i capitoli o macro-argomenti principali (massimo 8 blocchi).
-        Rispondi ESCLUSIVAMENTE con un JSON:
-        { "capitoli": ["Titolo 1", "Titolo 2", "..."] }
+        Analizza questo documento tecnico. Identifica i capitoli o i moduli principali.
+        Per ogni capitolo, restituisci il titolo e il numero di pagina esatto in cui inizia (basati sulla numerazione del PDF).
+        Rispondi ESCLUSIVAMENTE con questo JSON:
+        { "capitoli": [{ "titolo": "Nome Capitolo", "paginaInizio": 1 }, ...] }
       `;
       const res = await model.generateContent([promptOutline, pdfPart]);
       return NextResponse.json(JSON.parse(res.response.text()));
     }
 
+    // FASE 2: Riassunto del capitolo estratto
     if (action === 'chapter') {
       const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
 
       const promptRiassunto = `
-        Concediti il massimo dettaglio possibile per l'argomento: "${focus}".
-        Scrivi un riassunto ESTREMAMENTE LUNGO, sviscerando ogni dettaglio, formula e concetto di questa specifica sezione del PDF.
-        Usa Markdown per i titoli e LaTeX ($...$ e $$...$$) per le formule, scrivendo le formule normalmente (es: \\frac).
+        Sei un tutor esperto. Analizza questo capitolo estratto: "${focus}".
+        Scrivi un riassunto ESTREMAMENTE DETTAGLIATO e corposo. Includi formule, teoremi e spiegazioni approfondite.
+        Usa Markdown per i titoli e LaTeX ($...$ e $$...$$) per le formule.
       `;
       const riassuntoPromise = modelTesto.generateContent([promptRiassunto, pdfPart]);
 
       const promptQuiz = `
-        Argomento: "${focus}". Crea 3 flashcards e 2 domande a risposta multipla su questo argomento.
-        FAI L'ESCAPE (doppio backslash) per TUTTI i comandi LaTeX (es: \\\\frac).
+        Crea 3 flashcards e 2 domande a risposta multipla su questo capitolo: "${focus}".
+        FAI L'ESCAPE (doppio backslash) per il LaTeX (es: \\\\frac).
         Rispondi IN JSON:
         {
           "flashcards": [{"domanda": "...", "risposta": "..."}],
