@@ -1,3 +1,6 @@
+// QUESTA RIGA È MAGICA: Forza Vercel ad aspettare fino a 60 secondi invece di 10!
+export const maxDuration = 60; 
+
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -6,8 +9,8 @@ export async function POST(request: Request) {
     const data = await request.formData();
     const file: File | null = data.get('file') as unknown as File;
     const apiKey = data.get('apiKey') as string;
-    const action = data.get('action') as string; // 'outline' o 'chapter'
-    const focus = data.get('focus') as string; // Il capitolo corrente
+    const action = data.get('action') as string;
+    const focus = data.get('focus') as string;
 
     if (!file || !apiKey) {
       return NextResponse.json({ error: "File e API Key obbligatori." }, { status: 400 });
@@ -18,36 +21,32 @@ export async function POST(request: Request) {
     const base64Data = buffer.toString('base64');
 
     const genAI = new GoogleGenerativeAI(apiKey.trim());
-    
     const pdfPart = { inlineData: { data: base64Data, mimeType: "application/pdf" } };
 
-    // FASE 1: Estrazione automatica dell'indice
     if (action === 'outline') {
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
       const promptOutline = `
-        Analizza l'intero documento e identifica i capitoli o moduli principali (massimo 8-10 blocchi per non sovraccaricare).
+        Analizza l'intero documento e identifica i capitoli o macro-argomenti principali (massimo 8 blocchi).
         Rispondi ESCLUSIVAMENTE con un JSON:
-        { "capitoli": ["Nome Capitolo 1", "Nome Capitolo 2", "..."] }
+        { "capitoli": ["Titolo 1", "Titolo 2", "..."] }
       `;
       const res = await model.generateContent([promptOutline, pdfPart]);
       return NextResponse.json(JSON.parse(res.response.text()));
     }
 
-    // FASE 2: Analisi profonda di un singolo capitolo
     if (action === 'chapter') {
       const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
 
       const promptRiassunto = `
-        Sei un professore universitario. Concentrati ESCLUSIVAMENTE su questo capitolo/argomento del PDF: "${focus}".
-        Scrivi un riassunto ESTREMAMENTE LUNGO, sviscerando ogni dettaglio, formula e concetto di questa specifica sezione.
+        Concediti il massimo dettaglio possibile per l'argomento: "${focus}".
+        Scrivi un riassunto ESTREMAMENTE LUNGO, sviscerando ogni dettaglio, formula e concetto di questa specifica sezione del PDF.
         Usa Markdown per i titoli e LaTeX ($...$ e $$...$$) per le formule, scrivendo le formule normalmente (es: \\frac).
       `;
       const riassuntoPromise = modelTesto.generateContent([promptRiassunto, pdfPart]);
 
       const promptQuiz = `
-        Concentrati SOLO su: "${focus}".
-        Crea 3 flashcards e 2 domande a risposta multipla su questo specifico argomento.
+        Argomento: "${focus}". Crea 3 flashcards e 2 domande a risposta multipla su questo argomento.
         FAI L'ESCAPE (doppio backslash) per TUTTI i comandi LaTeX (es: \\\\frac).
         Rispondi IN JSON:
         {
@@ -70,7 +69,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Azione non valida" }, { status: 400 });
 
   } catch (error: any) {
-    console.error("🚨 ERRORE:", error);
+    console.error("🚨 ERRORE API:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
