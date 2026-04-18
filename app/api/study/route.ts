@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     // FASE 1: Individuazione capitoli
     if (action === 'outline') {
       const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash-latest", 
+        model: "gemini-3.1-flash-lite-preview", 
         generationConfig: { responseMimeType: "application/json" } 
       });
       
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     // FASE 2: Dispensa Esaustiva (Solo testo)
     if (action === 'chapter') {
-      const modelTesto = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+      const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
       const promptRiassunto = `
         Sei un tutor accademico. Redigi una DISPENSA ESAUSTIVA e DETTAGLIATA di: "${focus}".
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     // FASE 3: Generazione Q&A su richiesta (10 Flashcards e 10 Quiz)
     if (action === 'generate_qa') {
         const modelJSON = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-latest", 
+            model: "gemini-3.1-flash-lite-preview", 
             generationConfig: { responseMimeType: "application/json" } 
         });
 
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         try {
             qaData = JSON.parse(rawJsonString);
         } catch (e) {
+            // Il nostro fido Lava-JSON in azione
             const cleanedString = rawJsonString.replace(/\\(?!["\\/bfnrt])/g, "\\\\");
             qaData = JSON.parse(cleanedString);
         }
