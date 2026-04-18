@@ -31,10 +31,19 @@ export default function Home() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
+  // GESTIONE DARK MODE E SALVATAGGIO API KEY
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
+
+  // LA MAGIA: Appena si apre la pagina, cerca la chiave salvata nel browser
+  useEffect(() => {
+    const savedKey = localStorage.getItem('study_buddy_api_key');
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -44,6 +53,10 @@ export default function Home() {
 
   const startAutoPilot = async () => {
     if (!file || !apiKey) return alert("Configura API Key e PDF!");
+    
+    // Salviamo la chiave nel browser prima di partire, così non la perdi mai
+    localStorage.setItem('study_buddy_api_key', apiKey);
+    
     setLoading(true);
     setData(null);
 
@@ -78,18 +91,16 @@ export default function Home() {
         const cap = capitoliRaw[i];
         const nextCap = capitoliRaw[i + 1];
 
-        // Calcolo esatto delle pagine del capitolo
         let startPage = parseInt(cap.paginaInizio) - 1 || 0;
         startPage = Math.max(0, startPage);
         
         let endPage = nextCap ? (parseInt(nextCap.paginaInizio) - 2) : totalPages - 1;
         if (isNaN(endPage) || endPage < startPage) {
-            endPage = totalPages - 1; // Se l'IA sbaglia, prende fino alla fine
+            endPage = totalPages - 1;
         }
 
         setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Pag. ${startPage + 1} a ${endPage + 1})`);
 
-        // Estrazione del capitolo intero, qualunque sia la sua lunghezza
         const newPdf = await PDFDocument.create();
         const pagesToCopy = Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
         const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
@@ -114,7 +125,6 @@ export default function Home() {
             accumData.flashcards.push(...(capData.flashcards || []));
             accumData.quiz.push(...(capData.quiz || []));
           } else {
-            // Gestione errore se il server fallisce
             const errorText = await capRes.text();
             let errorMessage = `Errore Server (${capRes.status})`;
             try {
@@ -134,7 +144,6 @@ export default function Home() {
         
         setData({ ...accumData });
 
-        // Pausa di raffreddamento obbligatoria per non bloccare le API gratuite di Google
         if (i < capitoliRaw.length - 1) {
           setLoadingStatus(`Pausa di sicurezza tra i capitoli (5 secondi)...`);
           await new Promise(r => setTimeout(r, 5000));
@@ -209,7 +218,17 @@ export default function Home() {
         {!data && !loading ? (
           <div className={`max-w-xl mx-auto p-8 rounded-[2.5rem] backdrop-blur-3xl border ${darkMode ? 'bg-white/5 border-white/10' : 'bg-white/60 border-white/20 shadow-xl'}`}>
             <div className="space-y-6">
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full p-4 rounded-2xl bg-black/20 border border-white/10 outline-none focus:border-blue-500" placeholder="API Key gsk_..." />
+              <input 
+                type="password" 
+                value={apiKey} 
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  // Opzionale: salva la chiave istantaneamente mentre digiti
+                  localStorage.setItem('study_buddy_api_key', e.target.value);
+                }} 
+                className="w-full p-4 rounded-2xl bg-black/20 border border-white/10 outline-none focus:border-blue-500" 
+                placeholder="API Key gsk_..." 
+              />
               <label className="flex flex-col items-center justify-center w-full h-40 rounded-3xl border-2 border-dashed border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
                 <UploadCloud className="w-10 h-10 mb-3 opacity-50" />
                 <p className="text-sm font-medium">{file ? file.name : "Carica il PDF per l'analisi senza limiti"}</p>
