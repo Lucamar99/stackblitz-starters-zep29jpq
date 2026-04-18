@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       return NextResponse.json(JSON.parse(res.response.text()));
     }
 
-    // FASE 2: Riassunto del capitolo estratto
+// FASE 2: Riassunto del capitolo estratto
     if (action === 'chapter') {
       const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
@@ -48,8 +48,8 @@ export async function POST(request: Request) {
 
       const promptQuiz = `
         Crea 3 flashcards e 2 domande a risposta multipla su questo capitolo: "${focus}".
-        FAI L'ESCAPE (doppio backslash) per il LaTeX (es: \\\\frac).
-        Rispondi IN JSON:
+        Usa LaTeX per le formule matematiche.
+        Rispondi ESCLUSIVAMENTE IN JSON:
         {
           "flashcards": [{"domanda": "...", "risposta": "..."}],
           "quiz": [{"domanda": "...", "opzioni": ["a","b","c","d"], "corretta": 0, "spiegazione": "..."}]
@@ -58,7 +58,18 @@ export async function POST(request: Request) {
       const quizPromise = modelJSON.generateContent([promptQuiz, pdfPart]);
 
       const [riassuntoResult, quizResult] = await Promise.all([riassuntoPromise, quizPromise]);
-      const quizData = JSON.parse(quizResult.response.text());
+      
+      // IL LAVA-JSON: Pulizia automatica dei backslash ribelli del LaTeX!
+      let quizData;
+      const rawJsonString = quizResult.response.text();
+      try {
+        quizData = JSON.parse(rawJsonString);
+      } catch (e) {
+        console.log("JSON sporco rilevato, avvio pulizia di emergenza...");
+        // Questa espressione regolare aggiunge un doppio backslash a tutte le formule LaTeX sfuggite all'IA
+        const cleanedString = rawJsonString.replace(/\\(?!["\\/bfnrt])/g, "\\\\");
+        quizData = JSON.parse(cleanedString);
+      }
 
       return NextResponse.json({
         riassunto: riassuntoResult.response.text(),
@@ -66,7 +77,6 @@ export async function POST(request: Request) {
         quiz: quizData.quiz || []
       });
     }
-
     return NextResponse.json({ error: "Azione non valida" }, { status: 400 });
 
   } catch (error: any) {
