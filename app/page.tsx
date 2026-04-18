@@ -50,7 +50,7 @@ export default function Home() {
     let accumData = { riassunto: [] as any[], flashcards: [] as any[], quiz: [] as any[] };
 
     try {
-      setLoadingStatus("Fase 1: Individuazione dei capitoli nel documento...");
+      setLoadingStatus("Fase 1: Analisi dell'indice del documento...");
       
       const formOutline = new FormData();
       formOutline.append('file', file);
@@ -58,13 +58,18 @@ export default function Home() {
       formOutline.append('action', 'outline');
 
       const outlineRes = await fetch('/api/study', { method: 'POST', body: formOutline });
-      if (!outlineRes.ok) throw new Error("Errore durante l'analisi dell'indice.");
+      if (!outlineRes.ok) {
+         const errTesto = await outlineRes.text();
+         throw new Error(`Errore Server sull'indice: ${errTesto.substring(0, 100)}`);
+      }
+      
       const outlineData = await outlineRes.json();
       const capitoliRaw = outlineData.capitoli || [];
 
       if (capitoliRaw.length === 0) throw new Error("L'IA non ha trovato capitoli distinti.");
 
-      setLoadingStatus("Fase 2: Analisi profonda (senza limiti di lunghezza)...");
+      setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli (senza limiti)...");
+      
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
       const totalPages = pdfDoc.getPageCount();
@@ -73,80 +78,66 @@ export default function Home() {
         const cap = capitoliRaw[i];
         const nextCap = capitoliRaw[i + 1];
 
+        // Calcolo esatto delle pagine del capitolo
         let startPage = parseInt(cap.paginaInizio) - 1 || 0;
         startPage = Math.max(0, startPage);
         
         let endPage = nextCap ? (parseInt(nextCap.paginaInizio) - 2) : totalPages - 1;
         if (isNaN(endPage) || endPage < startPage) {
-            endPage = Math.min(startPage + 20, totalPages - 1);
+            endPage = totalPages - 1; // Se l'IA sbaglia, prende fino alla fine
         }
 
-        // LA CUCITURA INVISIBILE: Invece di tagliare il capitolo, lo dividiamo in "Sotto-blocchi" sicuri.
-        // Vercel non andrà in timeout, e alla fine uniremo tutto in un solo capitolo!
-        const CHUNK_LIMIT = 12; // 12 pagine per volta è il limite di sicurezza perfetto
-        const totalChapterPages = endPage - startPage + 1;
-        const subChunks = Math.ceil(totalChapterPages / CHUNK_LIMIT);
+        setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Pag. ${startPage + 1} a ${endPage + 1})`);
 
-        let chapterTextCombinato = "";
-        let chapterFlashcardsCombinate: any[] = [];
-        let chapterQuizCombinati: any[] = [];
+        // Estrazione del capitolo intero, qualunque sia la sua lunghezza
+        const newPdf = await PDFDocument.create();
+        const pagesToCopy = Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
+        const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
+        copiedPages.forEach((page) => newPdf.addPage(page));
+        const pdfBytes = await newPdf.save();
+        
+        const chunkBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const chunkFile = new File([chunkBlob], `chapter_${i}.pdf`, { type: 'application/pdf' });
 
-        for (let j = 0; j < subChunks; j++) {
-            const subStart = startPage + (j * CHUNK_LIMIT);
-            const subEnd = Math.min(subStart + CHUNK_LIMIT - 1, endPage);
+        const formData = new FormData();
+        formData.append('file', chunkFile);
+        formData.append('apiKey', apiKey);
+        formData.append('action', 'chapter');
+        formData.append('focus', cap.titolo);
 
-            setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Parte ${j+1} di ${subChunks})`);
-
-            const newPdf = await PDFDocument.create();
-            const pagesToCopy = Array.from({ length: subEnd - subStart + 1 }, (_, index) => subStart + index);
-            const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
-            copiedPages.forEach((page) => newPdf.addPage(page));
-            const pdfBytes = await newPdf.save();
-            
-            const chunkBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-            const chunkFile = new File([chunkBlob], `chapter_${i}_part_${j}.pdf`, { type: 'application/pdf' });
-
-            const formData = new FormData();
-            formData.append('file', chunkFile);
-            formData.append('apiKey', apiKey);
-            formData.append('action', 'chapter');
-            // Diciamo all'IA che sta analizzando una parte specifica per mantenere il contesto
-            formData.append('focus', `${cap.titolo} (Parte ${j+1} di ${subChunks})`);
-
+        try {
+          const capRes = await fetch('/api/study', { method: 'POST', body: formData });
+          
+          if (capRes.ok) {
+            const capData = await capRes.json();
+            accumData.riassunto.push({ titolo: cap.titolo, testo: capData.riassunto });
+            accumData.flashcards.push(...(capData.flashcards || []));
+            accumData.quiz.push(...(capData.quiz || []));
+          } else {
+            // Gestione errore se il server fallisce
+            const errorText = await capRes.text();
+            let errorMessage = `Errore Server (${capRes.status})`;
             try {
-                const capRes = await fetch('/api/study', { method: 'POST', body: formData });
-                if (capRes.ok) {
-                    const capData = await capRes.json();
-                    chapterTextCombinato += `\n\n${capData.riassunto}`;
-                    chapterFlashcardsCombinate.push(...(capData.flashcards || []));
-                    chapterQuizCombinati.push(...(capData.quiz || []));
-                } else {
-                    const errorText = await capRes.text();
-                    let errorMessage = "Errore Server";
-                    try { errorMessage = JSON.parse(errorText).error || errorMessage; } catch {}
-                    chapterTextCombinato += `\n\n⚠️ *Generazione parte ${j+1} interrotta: ${errorMessage}*`;
-                }
-            } catch (e) {
-                chapterTextCombinato += `\n\n⚠️ *La connessione è caduta per la parte ${j+1}.*`;
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.error || errorMessage;
+            } catch (jsonError) {
+              if (capRes.status === 504) errorMessage = "Timeout di Vercel (Il server ha impiegato più di 60 secondi)";
             }
-
-            // Pausa vitale tra i sotto-blocchi per non bloccare le API
-            if (j < subChunks - 1) {
-                setLoadingStatus(`Pausa di raffreddamento...`);
-                await new Promise(r => setTimeout(r, 4000));
-            }
+            accumData.riassunto.push({ 
+                titolo: cap.titolo, 
+                testo: `⚠️ **Generazione interrotta.** Motivo: *${errorMessage}*` 
+            });
+          }
+        } catch (e) {
+          accumData.riassunto.push({ titolo: cap.titolo, testo: "⚠️ *La connessione di rete è caduta o bloccata.*" });
         }
-
-        // Finito di analizzare tutte le parti, salviamo il capitolo intero e unito!
-        accumData.riassunto.push({ titolo: cap.titolo, testo: chapterTextCombinato });
-        accumData.flashcards.push(...chapterFlashcardsCombinate);
-        accumData.quiz.push(...chapterQuizCombinati);
+        
         setData({ ...accumData });
 
-        // Pausa vitale tra i capitoli maggiori
+        // Pausa di raffreddamento obbligatoria per non bloccare le API gratuite di Google
         if (i < capitoliRaw.length - 1) {
-          setLoadingStatus(`Passaggio al prossimo capitolo...`);
-          await new Promise(r => setTimeout(r, 4000));
+          setLoadingStatus(`Pausa di sicurezza tra i capitoli (5 secondi)...`);
+          await new Promise(r => setTimeout(r, 5000));
         }
       }
 
@@ -155,7 +146,7 @@ export default function Home() {
       setExpandedChapter(0);
 
     } catch (error: any) {
-      alert("Errore: " + error.message);
+      alert("Errore critico: " + error.message);
     }
     setLoading(false);
   };
@@ -211,7 +202,7 @@ export default function Home() {
            <div className="mb-8 p-8 rounded-[2.5rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-4 backdrop-blur-xl">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
               <p className="font-bold text-xl text-blue-500">{loadingStatus}</p>
-              <p className="text-sm opacity-60">L'IA sta elaborando la tua dispensa. I capitoli molto lunghi verranno analizzati in più parti per garantire la massima profondità.</p>
+              <p className="text-sm opacity-60">L'IA sta elaborando la tua dispensa per capitoli interi. Non chiudere la pagina.</p>
            </div>
         )}
 
