@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, Layers, CheckSquare, UploadCloud, 
-  ChevronRight, ChevronLeft, Sparkles, Moon, Sun, FileText, X, CheckCircle, XCircle, Loader2, ChevronDown 
+  ChevronRight, ChevronLeft, Sparkles, Moon, Sun, FileText, X, CheckCircle, XCircle, Loader2, ChevronDown, Download 
 } from 'lucide-react';
 
 import ReactMarkdown from 'react-markdown';
@@ -78,7 +78,7 @@ export default function Home() {
 
       if (capitoliRaw.length === 0) throw new Error("L'IA non ha trovato capitoli distinti.");
 
-      setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli...");
+      setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli (senza limiti)...");
       
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
@@ -196,9 +196,8 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-8 md:py-12">
-        <header className="flex justify-between items-center mb-10 md:mb-16">
+        <header className="flex justify-between items-center mb-10 md:mb-16 gap-4">
           
-          {/* IL NUOVO LOGO STUDDY */}
           <div className="flex items-center gap-4">
             <motion.div 
               whileHover={{ rotate: 10, scale: 1.05 }} 
@@ -212,8 +211,8 @@ export default function Home() {
             </h1>
           </div>
 
-          <div className="flex gap-3">
-            {data && <button onClick={() => setShowPdfModal(true)} className="px-4 py-2 rounded-full text-sm font-bold bg-blue-600 text-white shadow-lg flex items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>}
+          <div className="flex gap-3 flex-shrink-0">
+            {data && <button onClick={() => setShowPdfModal(true)} className="px-4 py-2 rounded-full text-sm font-bold bg-blue-600 text-white shadow-lg flex items-center gap-2"><FileText className="w-4 h-4" /> <span className="hidden md:inline">PDF</span></button>}
             <button onClick={() => setDarkMode(!darkMode)} className="p-3 rounded-full backdrop-blur-xl border border-white/10">{darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-indigo-600" />}</button>
           </div>
         </header>
@@ -363,13 +362,54 @@ export default function Home() {
 
       <AnimatePresence>
         {showPdfModal && pdfUrl && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/80 backdrop-blur-xl">
-            <div className="relative w-full h-full max-w-5xl rounded-[3rem] overflow-hidden bg-zinc-900 border border-white/10 flex flex-col">
-              <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10">
-                <span className="font-bold flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500"/> Documento Originale</span>
-                <button onClick={() => setShowPdfModal(false)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"><X className="w-5 h-5" /></button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-xl">
+            <div className="relative w-full h-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border border-white/10 flex flex-col">
+              
+              {/* HEADER MODAL CON BOTTONE SCARICA PER MOBILE */}
+              <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10 shadow-md">
+                <span className="font-bold flex items-center gap-2 text-white">
+                  <FileText className="w-5 h-5 text-blue-500"/> 
+                  <span className="hidden md:inline">Documento Originale</span>
+                  <span className="md:hidden">PDF</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <a 
+                    href={pdfUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    download={file?.name || "documento.pdf"} 
+                    className="px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-colors flex items-center gap-2 font-bold text-sm"
+                  >
+                    <Download className="w-4 h-4" /> <span className="hidden md:inline">Scarica / Apri</span>
+                  </a>
+                  <button onClick={() => setShowPdfModal(false)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-              <iframe src={pdfUrl} className="flex-1 w-full h-full bg-zinc-800" />
+
+              {/* CONTENITORE PDF ROBUSTO PER MOBILE E DESKTOP */}
+              <div className="flex-1 w-full h-full bg-zinc-800 relative">
+                <object data={pdfUrl} type="application/pdf" className="absolute inset-0 w-full h-full">
+                  {/* FALLBACK: Se il browser blocca l'object (es. iOS), mostra questo contenuto */}
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-6">
+                    <FileText className="w-20 h-20 text-white/20" />
+                    <p className="text-white/60 text-lg max-w-md">
+                      Il tuo browser mobile impedisce la visualizzazione diretta dei PDF integrati.
+                    </p>
+                    <a 
+                      href={pdfUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      download={file?.name || "documento.pdf"} 
+                      className="px-8 py-4 bg-blue-600 text-white font-bold rounded-full shadow-lg hover:bg-blue-500 transition-colors"
+                    >
+                      Apri o Scarica il PDF
+                    </a>
+                  </div>
+                </object>
+              </div>
+
             </div>
           </motion.div>
         )}
