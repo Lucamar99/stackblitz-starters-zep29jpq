@@ -64,7 +64,7 @@ export default function Home() {
 
       if (capitoliRaw.length === 0) throw new Error("L'IA non ha trovato capitoli distinti.");
 
-      setLoadingStatus("Fase 2: Taglio e analisi dei singoli capitoli...");
+      setLoadingStatus("Fase 2: Analisi profonda (senza limiti di lunghezza)...");
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
       const totalPages = pdfDoc.getPageCount();
@@ -78,49 +78,75 @@ export default function Home() {
         
         let endPage = nextCap ? (parseInt(nextCap.paginaInizio) - 2) : totalPages - 1;
         if (isNaN(endPage) || endPage < startPage) {
-            endPage = Math.min(startPage + 15, totalPages - 1);
+            endPage = Math.min(startPage + 20, totalPages - 1);
         }
 
-        setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Pag. ${startPage + 1} - ${endPage + 1})`);
+        // LA CUCITURA INVISIBILE: Invece di tagliare il capitolo, lo dividiamo in "Sotto-blocchi" sicuri.
+        // Vercel non andrà in timeout, e alla fine uniremo tutto in un solo capitolo!
+        const CHUNK_LIMIT = 12; // 12 pagine per volta è il limite di sicurezza perfetto
+        const totalChapterPages = endPage - startPage + 1;
+        const subChunks = Math.ceil(totalChapterPages / CHUNK_LIMIT);
 
-        const newPdf = await PDFDocument.create();
-        const pagesToCopy = Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
-        const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
-        copiedPages.forEach((page) => newPdf.addPage(page));
-        const pdfBytes = await newPdf.save();
-        
-        const chunkBlob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const chunkFile = new File([chunkBlob], `chapter_${i}.pdf`, { type: 'application/pdf' });
+        let chapterTextCombinato = "";
+        let chapterFlashcardsCombinate: any[] = [];
+        let chapterQuizCombinati: any[] = [];
 
-        const formData = new FormData();
-        formData.append('file', chunkFile);
-        formData.append('apiKey', apiKey);
-        formData.append('action', 'chapter');
-        formData.append('focus', cap.titolo);
+        for (let j = 0; j < subChunks; j++) {
+            const subStart = startPage + (j * CHUNK_LIMIT);
+            const subEnd = Math.min(subStart + CHUNK_LIMIT - 1, endPage);
 
-        try {
-          const capRes = await fetch('/api/study', { method: 'POST', body: formData });
-          if (capRes.ok) {
-            const capData = await capRes.json();
-            accumData.riassunto.push({ titolo: cap.titolo, testo: capData.riassunto });
-            accumData.flashcards.push(...(capData.flashcards || []));
-            accumData.quiz.push(...(capData.quiz || []));
-          } else {
-            const errorData = await capRes.json();
-            accumData.riassunto.push({ 
-                titolo: cap.titolo, 
-                testo: `⚠️ **Generazione interrotta.** Il server riporta: *${errorData.error || "Errore sconosciuto"}*` 
-            });
-          }
-        } catch (e) {
-          accumData.riassunto.push({ titolo: cap.titolo, testo: "⚠️ *La connessione di rete è caduta.*" });
+            setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Parte ${j+1} di ${subChunks})`);
+
+            const newPdf = await PDFDocument.create();
+            const pagesToCopy = Array.from({ length: subEnd - subStart + 1 }, (_, index) => subStart + index);
+            const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
+            copiedPages.forEach((page) => newPdf.addPage(page));
+            const pdfBytes = await newPdf.save();
+            
+            const chunkBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const chunkFile = new File([chunkBlob], `chapter_${i}_part_${j}.pdf`, { type: 'application/pdf' });
+
+            const formData = new FormData();
+            formData.append('file', chunkFile);
+            formData.append('apiKey', apiKey);
+            formData.append('action', 'chapter');
+            // Diciamo all'IA che sta analizzando una parte specifica per mantenere il contesto
+            formData.append('focus', `${cap.titolo} (Parte ${j+1} di ${subChunks})`);
+
+            try {
+                const capRes = await fetch('/api/study', { method: 'POST', body: formData });
+                if (capRes.ok) {
+                    const capData = await capRes.json();
+                    chapterTextCombinato += `\n\n${capData.riassunto}`;
+                    chapterFlashcardsCombinate.push(...(capData.flashcards || []));
+                    chapterQuizCombinati.push(...(capData.quiz || []));
+                } else {
+                    const errorText = await capRes.text();
+                    let errorMessage = "Errore Server";
+                    try { errorMessage = JSON.parse(errorText).error || errorMessage; } catch {}
+                    chapterTextCombinato += `\n\n⚠️ *Generazione parte ${j+1} interrotta: ${errorMessage}*`;
+                }
+            } catch (e) {
+                chapterTextCombinato += `\n\n⚠️ *La connessione è caduta per la parte ${j+1}.*`;
+            }
+
+            // Pausa vitale tra i sotto-blocchi per non bloccare le API
+            if (j < subChunks - 1) {
+                setLoadingStatus(`Pausa di raffreddamento...`);
+                await new Promise(r => setTimeout(r, 4000));
+            }
         }
-        
+
+        // Finito di analizzare tutte le parti, salviamo il capitolo intero e unito!
+        accumData.riassunto.push({ titolo: cap.titolo, testo: chapterTextCombinato });
+        accumData.flashcards.push(...chapterFlashcardsCombinate);
+        accumData.quiz.push(...chapterQuizCombinati);
         setData({ ...accumData });
 
+        // Pausa vitale tra i capitoli maggiori
         if (i < capitoliRaw.length - 1) {
-          setLoadingStatus(`Pausa di raffreddamento server (5 sec)...`);
-          await new Promise(r => setTimeout(r, 5000));
+          setLoadingStatus(`Passaggio al prossimo capitolo...`);
+          await new Promise(r => setTimeout(r, 4000));
         }
       }
 
@@ -145,7 +171,6 @@ export default function Home() {
     setQuizAnswers(prev => ({ ...prev, [qIndex]: oIndex }));
   };
 
-  // IL NUOVO COMPONENTE MARKDOWN: Ottimizzato per dispensa densa, accademica e giustificata
   const RenderMarkdown = ({ content }: { content: string }) => (
     <div className="w-full text-left">
       <ReactMarkdown 
@@ -186,7 +211,7 @@ export default function Home() {
            <div className="mb-8 p-8 rounded-[2.5rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-4 backdrop-blur-xl">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
               <p className="font-bold text-xl text-blue-500">{loadingStatus}</p>
-              <p className="text-sm opacity-60">L'IA sta elaborando la tua dispensa enciclopedica tagliando il PDF a blocchi. Non chiudere.</p>
+              <p className="text-sm opacity-60">L'IA sta elaborando la tua dispensa. I capitoli molto lunghi verranno analizzati in più parti per garantire la massima profondità.</p>
            </div>
         )}
 
@@ -196,7 +221,7 @@ export default function Home() {
               <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full p-4 rounded-2xl bg-black/20 border border-white/10 outline-none focus:border-blue-500" placeholder="API Key gsk_..." />
               <label className="flex flex-col items-center justify-center w-full h-40 rounded-3xl border-2 border-dashed border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
                 <UploadCloud className="w-10 h-10 mb-3 opacity-50" />
-                <p className="text-sm font-medium">{file ? file.name : "Carica il PDF per dividerlo in capitoli"}</p>
+                <p className="text-sm font-medium">{file ? file.name : "Carica il PDF per l'analisi senza limiti"}</p>
                 <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
               </label>
               <button onClick={startAutoPilot} className="w-full py-4 bg-blue-600 hover:bg-blue-500 transition-colors text-white rounded-2xl font-bold flex justify-center items-center gap-2">Avvia Analisi Accademica <Sparkles className="w-5 h-5" /></button>
@@ -206,7 +231,7 @@ export default function Home() {
           <div className="space-y-8">
             <nav className="flex justify-center gap-2 p-1.5 rounded-full bg-white/10 backdrop-blur-2xl border border-white/10 w-max mx-auto overflow-x-auto">
               {['riassunto', 'flashcards', 'quiz'].map(t => (
-                <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2.5 rounded-full text-sm font-bold capitalize transition-all ${activeTab === t ? 'bg-white text-black shadow-md' : 'opacity-60 hover:opacity-100'}`}>{t === 'riassunto' ? 'Dispensa' : t}</button>
+                <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2.5 rounded-full text-sm font-bold capitalize transition-all ${activeTab === t ? 'bg-white text-black shadow-md' : 'opacity-60 hover:opacity-100'}`}>{t === 'riassunto' ? 'Dispensa Completa' : t}</button>
               ))}
             </nav>
 
@@ -217,7 +242,7 @@ export default function Home() {
                     <div key={idx} className="rounded-[2rem] border border-white/10 bg-white/5 overflow-hidden backdrop-blur-xl">
                       <button onClick={() => setExpandedChapter(expandedChapter === idx ? null : idx)} className="w-full p-6 md:p-8 flex justify-between items-center text-left hover:bg-white/5 transition-colors">
                         <span className="text-xl md:text-2xl font-bold flex items-center gap-4">
-                          <span className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/20 text-blue-500 text-sm">{idx + 1}</span>
+                          <span className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/20 text-blue-500 text-sm flex-shrink-0">{idx + 1}</span>
                           {cap.titolo}
                         </span>
                         <ChevronDown className={`w-6 h-6 opacity-50 transition-transform ${expandedChapter === idx ? 'rotate-180' : ''}`} />
