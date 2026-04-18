@@ -6,9 +6,11 @@ export async function POST(request: Request) {
     const data = await request.formData();
     const file: File | null = data.get('file') as unknown as File;
     const apiKey = data.get('apiKey') as string;
+    const action = data.get('action') as string; // 'outline' o 'chapter'
+    const focus = data.get('focus') as string; // Il capitolo corrente
 
     if (!file || !apiKey) {
-      return NextResponse.json({ error: "File e API Key sono obbligatori." }, { status: 400 });
+      return NextResponse.json({ error: "File e API Key obbligatori." }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -17,58 +19,58 @@ export async function POST(request: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey.trim());
     
-    // MODELLO 1: Libero e senza limiti per scrivere un papiro
-    const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-    
-    // MODELLO 2: Ingabbiato nel JSON solo per Quiz e Flashcards
-    const modelJSON = genAI.getGenerativeModel({ 
-      model: "gemini-3.1-flash-lite-preview",
-      generationConfig: { responseMimeType: "application/json" }
-    });
+    const pdfPart = { inlineData: { data: base64Data, mimeType: "application/pdf" } };
 
-    const pdfPart = {
-      inlineData: { data: base64Data, mimeType: "application/pdf" }
-    };
+    // FASE 1: Estrazione automatica dell'indice
+    if (action === 'outline') {
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
+      const promptOutline = `
+        Analizza l'intero documento e identifica i capitoli o moduli principali (massimo 8-10 blocchi per non sovraccaricare).
+        Rispondi ESCLUSIVAMENTE con un JSON:
+        { "capitoli": ["Nome Capitolo 1", "Nome Capitolo 2", "..."] }
+      `;
+      const res = await model.generateContent([promptOutline, pdfPart]);
+      return NextResponse.json(JSON.parse(res.response.text()));
+    }
 
-    // --- FASE 1: IL RIASSUNTO TITANICO ---
-    const promptRiassunto = `
-      Sei un professore universitario esigente. Ho bisogno di un riassunto ESTREMAMENTE LUNGO, APPROFONDITO e CORPOSO del documento allegato.
-      REGOLE:
-      1. Procedi rigorosamente capitolo per capitolo, sezione per sezione.
-      2. NON tralasciare formule, definizioni tecniche o passaggi logici.
-      3. Voglio una vera e propria "dispensa" sostitutiva del libro, non una sintesi.
-      4. Usa il Markdown per titoli, elenchi puntati e grassetti.
-      5. Usa il formato LaTeX per le formule matematiche (es: $formula$ o $$formula$$). Non fare l'escape del backslash, scrivi le formule normalmente (es: \\frac).
-    `;
-    const riassuntoPromise = modelTesto.generateContent([promptRiassunto, pdfPart]);
+    // FASE 2: Analisi profonda di un singolo capitolo
+    if (action === 'chapter') {
+      const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
 
-    // --- FASE 2: QUIZ E FLASHCARDS ---
-    const promptQuiz = `
-      Analizza il documento e genera materiale di ripasso.
-      ATTENZIONE: Poiché rispondi in JSON, fai l'escape (doppio backslash) per TUTTI i comandi LaTeX (es: \\\\frac).
-      Rispondi ESCLUSIVAMENTE con un JSON con questa struttura:
-      {
-        "flashcards": [{"domanda": "...", "risposta": "..."}],
-        "quiz": [{"domanda": "...", "opzioni": ["a","b","c","d"], "corretta": 0, "spiegazione": "..."}]
-      }
-    `;
-    const quizPromise = modelJSON.generateContent([promptQuiz, pdfPart]);
+      const promptRiassunto = `
+        Sei un professore universitario. Concentrati ESCLUSIVAMENTE su questo capitolo/argomento del PDF: "${focus}".
+        Scrivi un riassunto ESTREMAMENTE LUNGO, sviscerando ogni dettaglio, formula e concetto di questa specifica sezione.
+        Usa Markdown per i titoli e LaTeX ($...$ e $$...$$) per le formule, scrivendo le formule normalmente (es: \\frac).
+      `;
+      const riassuntoPromise = modelTesto.generateContent([promptRiassunto, pdfPart]);
 
-    // Eseguiamo le due operazioni in parallelo per non far aspettare troppo l'utente
-    const [riassuntoResult, quizResult] = await Promise.all([riassuntoPromise, quizPromise]);
+      const promptQuiz = `
+        Concentrati SOLO su: "${focus}".
+        Crea 3 flashcards e 2 domande a risposta multipla su questo specifico argomento.
+        FAI L'ESCAPE (doppio backslash) per TUTTI i comandi LaTeX (es: \\\\frac).
+        Rispondi IN JSON:
+        {
+          "flashcards": [{"domanda": "...", "risposta": "..."}],
+          "quiz": [{"domanda": "...", "opzioni": ["a","b","c","d"], "corretta": 0, "spiegazione": "..."}]
+        }
+      `;
+      const quizPromise = modelJSON.generateContent([promptQuiz, pdfPart]);
 
-    const testoRiassunto = riassuntoResult.response.text();
-    const quizData = JSON.parse(quizResult.response.text());
+      const [riassuntoResult, quizResult] = await Promise.all([riassuntoPromise, quizPromise]);
+      const quizData = JSON.parse(quizResult.response.text());
 
-    // Assembliamo il pacchetto finale per il sito
-    return NextResponse.json({
-      riassunto: testoRiassunto,
-      flashcards: quizData.flashcards,
-      quiz: quizData.quiz
-    });
+      return NextResponse.json({
+        riassunto: riassuntoResult.response.text(),
+        flashcards: quizData.flashcards || [],
+        quiz: quizData.quiz || []
+      });
+    }
+
+    return NextResponse.json({ error: "Azione non valida" }, { status: 400 });
 
   } catch (error: any) {
-    console.error("🚨 ERRORE INTERNO:", error);
-    return NextResponse.json({ error: error.message || "Errore durante la generazione." }, { status: 500 });
+    console.error("🚨 ERRORE:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
