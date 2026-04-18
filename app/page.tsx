@@ -15,6 +15,11 @@ import 'katex/dist/katex.min.css';
 
 import { PDFDocument } from 'pdf-lib';
 
+// IMPORTIAMO IL NUOVO MOTORE PER IL LETTORE PDF
+import { Document, Page, pdfjs } from 'react-pdf';
+// Diciamo all'app dove pescare il "cervello" del lettore PDF
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
 export default function Home() {
   const [apiKey, setApiKey] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -31,6 +36,11 @@ export default function Home() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
+  // STATI PER IL NUOVO LETTORE PDF
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [viewerWidth, setViewerWidth] = useState(0);
+
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -38,10 +48,18 @@ export default function Home() {
 
   useEffect(() => {
     const savedKey = localStorage.getItem('study_buddy_api_key');
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
+    if (savedKey) setApiKey(savedKey);
   }, []);
+
+  // Questo calcola la larghezza dello schermo per far "fittare" il PDF
+  useEffect(() => {
+    if (showPdfModal) {
+      setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 32 : Math.min(window.innerWidth - 100, 900));
+      const handleResize = () => setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 32 : Math.min(window.innerWidth - 100, 900));
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [showPdfModal]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
@@ -53,7 +71,6 @@ export default function Home() {
     if (!file || !apiKey) return alert("Configura API Key e PDF!");
     
     localStorage.setItem('study_buddy_api_key', apiKey);
-    
     setLoading(true);
     setData(null);
 
@@ -61,7 +78,6 @@ export default function Home() {
 
     try {
       setLoadingStatus("Fase 1: Analisi dell'indice del documento...");
-      
       const formOutline = new FormData();
       formOutline.append('file', file);
       formOutline.append('apiKey', apiKey);
@@ -79,7 +95,6 @@ export default function Home() {
       if (capitoliRaw.length === 0) throw new Error("L'IA non ha trovato capitoli distinti.");
 
       setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli (senza limiti)...");
-      
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
       const totalPages = pdfDoc.getPageCount();
@@ -90,11 +105,8 @@ export default function Home() {
 
         let startPage = parseInt(cap.paginaInizio) - 1 || 0;
         startPage = Math.max(0, startPage);
-        
         let endPage = nextCap ? (parseInt(nextCap.paginaInizio) - 2) : totalPages - 1;
-        if (isNaN(endPage) || endPage < startPage) {
-            endPage = totalPages - 1;
-        }
+        if (isNaN(endPage) || endPage < startPage) endPage = totalPages - 1;
 
         setLoadingStatus(`Analisi Capitolo: ${cap.titolo} (Pag. ${startPage + 1} a ${endPage + 1})`);
 
@@ -115,7 +127,6 @@ export default function Home() {
 
         try {
           const capRes = await fetch('/api/study', { method: 'POST', body: formData });
-          
           if (capRes.ok) {
             const capData = await capRes.json();
             accumData.riassunto.push({ titolo: cap.titolo, testo: capData.riassunto });
@@ -124,16 +135,10 @@ export default function Home() {
           } else {
             const errorText = await capRes.text();
             let errorMessage = `Errore Server (${capRes.status})`;
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorMessage = errorJson.error || errorMessage;
-            } catch (jsonError) {
+            try { errorMessage = JSON.parse(errorText).error || errorMessage; } catch (e) {
               if (capRes.status === 504) errorMessage = "Timeout di Vercel (Il server ha impiegato più di 60 secondi)";
             }
-            accumData.riassunto.push({ 
-                titolo: cap.titolo, 
-                testo: `⚠️ **Generazione interrotta.** Motivo: *${errorMessage}*` 
-            });
+            accumData.riassunto.push({ titolo: cap.titolo, testo: `⚠️ **Generazione interrotta.** Motivo: *${errorMessage}*` });
           }
         } catch (e) {
           accumData.riassunto.push({ titolo: cap.titolo, testo: "⚠️ *La connessione di rete è caduta o bloccata.*" });
@@ -362,25 +367,25 @@ export default function Home() {
 
       <AnimatePresence>
         {showPdfModal && pdfUrl && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-xl">
-            <div className="relative w-full h-full max-w-5xl rounded-3xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border border-white/10 flex flex-col">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8 bg-black/90 backdrop-blur-xl">
+            <div className="relative w-full h-full max-w-5xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border-0 md:border border-white/10 flex flex-col shadow-2xl">
               
-              {/* HEADER MODAL CON BOTTONE SCARICA PER MOBILE */}
+              {/* HEADER DEL LETTORE PDF */}
               <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10 shadow-md">
                 <span className="font-bold flex items-center gap-2 text-white">
-                  <FileText className="w-5 h-5 text-blue-500"/> 
+                  <FileText className="w-5 h-5 text-blue-500"/>
                   <span className="hidden md:inline">Documento Originale</span>
-                  <span className="md:hidden">PDF</span>
+                  <span className="md:hidden">Lettore PDF</span>
                 </span>
                 <div className="flex items-center gap-2">
-                  <a 
-                    href={pdfUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    download={file?.name || "documento.pdf"} 
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={file?.name || "documento.pdf"}
                     className="px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-colors flex items-center gap-2 font-bold text-sm"
                   >
-                    <Download className="w-4 h-4" /> <span className="hidden md:inline">Scarica / Apri</span>
+                    <Download className="w-4 h-4" /> <span className="hidden md:inline">Scarica Originale</span>
                   </a>
                   <button onClick={() => setShowPdfModal(false)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
                     <X className="w-5 h-5" />
@@ -388,26 +393,47 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* CONTENITORE PDF ROBUSTO PER MOBILE E DESKTOP */}
-              <div className="flex-1 w-full h-full bg-zinc-800 relative">
-                <object data={pdfUrl} type="application/pdf" className="absolute inset-0 w-full h-full">
-                  {/* FALLBACK: Se il browser blocca l'object (es. iOS), mostra questo contenuto */}
-                  <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-6">
-                    <FileText className="w-20 h-20 text-white/20" />
-                    <p className="text-white/60 text-lg max-w-md">
-                      Il tuo browser mobile impedisce la visualizzazione diretta dei PDF integrati.
-                    </p>
-                    <a 
-                      href={pdfUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      download={file?.name || "documento.pdf"} 
-                      className="px-8 py-4 bg-blue-600 text-white font-bold rounded-full shadow-lg hover:bg-blue-500 transition-colors"
-                    >
-                      Apri o Scarica il PDF
-                    </a>
-                  </div>
-                </object>
+              {/* IL MOTORE REACT-PDF (Funziona anche su iOS!) */}
+              <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8">
+                 {viewerWidth > 0 && (
+                   <Document
+                     file={pdfUrl}
+                     onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }}
+                     loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />}
+                     className="flex flex-col items-center"
+                   >
+                     <Page
+                       pageNumber={pageNumber}
+                       width={viewerWidth}
+                       renderTextLayer={false}
+                       renderAnnotationLayer={false}
+                       className="shadow-2xl rounded-md overflow-hidden bg-white"
+                     />
+                   </Document>
+                 )}
+
+                 {/* PAGINAZIONE FLUTTUANTE */}
+                 {numPages && (
+                   <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full flex items-center gap-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10 z-50">
+                     <button
+                       disabled={pageNumber <= 1}
+                       onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+                       className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"
+                     >
+                       <ChevronLeft className="w-6 h-6" />
+                     </button>
+                     <span className="font-mono font-bold whitespace-nowrap">
+                       {pageNumber} / {numPages}
+                     </span>
+                     <button
+                       disabled={pageNumber >= numPages}
+                       onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
+                       className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"
+                     >
+                       <ChevronRight className="w-6 h-6" />
+                     </button>
+                   </div>
+                 )}
               </div>
 
             </div>
