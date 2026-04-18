@@ -1,13 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    // !! ATTENZIONE !!
-    // Disabilita i controlli TypeScript durante la build su Vercel
     ignoreBuildErrors: true,
   },
   eslint: {
-    // Disabilita i controlli ESLint durante la build su Vercel
     ignoreDuringBuilds: true,
+  },
+  // AGGIUNGI QUESTO BLOCCO: Serve per far funzionare react-pdf su Vercel
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    return config;
   },
 };
 
