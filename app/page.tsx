@@ -31,13 +31,11 @@ export default function Home() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
-  // GESTIONE DARK MODE E SALVATAGGIO API KEY
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // LA MAGIA: Appena si apre la pagina, cerca la chiave salvata nel browser
   useEffect(() => {
     const savedKey = localStorage.getItem('study_buddy_api_key');
     if (savedKey) {
@@ -54,7 +52,6 @@ export default function Home() {
   const startAutoPilot = async () => {
     if (!file || !apiKey) return alert("Configura API Key e PDF!");
     
-    // Salviamo la chiave nel browser prima di partire, così non la perdi mai
     localStorage.setItem('study_buddy_api_key', apiKey);
     
     setLoading(true);
@@ -81,7 +78,7 @@ export default function Home() {
 
       if (capitoliRaw.length === 0) throw new Error("L'IA non ha trovato capitoli distinti.");
 
-      setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli (senza limiti)...");
+      setLoadingStatus("Fase 2: Estrazione e riassunto dei capitoli...");
       
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
@@ -199,8 +196,22 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-8 md:py-12">
-        <header className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">Study Buddy <span className="text-blue-500">Auto</span></h1>
+        <header className="flex justify-between items-center mb-10 md:mb-16">
+          
+          {/* IL NUOVO LOGO STUDDY */}
+          <div className="flex items-center gap-4">
+            <motion.div 
+              whileHover={{ rotate: 10, scale: 1.05 }} 
+              whileTap={{ scale: 0.95 }}
+              className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 cursor-pointer"
+            >
+              <BookOpen className="w-6 h-6 md:w-7 md:h-7 text-white" strokeWidth={2.5} />
+            </motion.div>
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter lowercase">
+              studdy<span className="text-blue-500">.</span>
+            </h1>
+          </div>
+
           <div className="flex gap-3">
             {data && <button onClick={() => setShowPdfModal(true)} className="px-4 py-2 rounded-full text-sm font-bold bg-blue-600 text-white shadow-lg flex items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>}
             <button onClick={() => setDarkMode(!darkMode)} className="p-3 rounded-full backdrop-blur-xl border border-white/10">{darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-indigo-600" />}</button>
@@ -211,7 +222,7 @@ export default function Home() {
            <div className="mb-8 p-8 rounded-[2.5rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-4 backdrop-blur-xl">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
               <p className="font-bold text-xl text-blue-500">{loadingStatus}</p>
-              <p className="text-sm opacity-60">L'IA sta elaborando la tua dispensa per capitoli interi. Non chiudere la pagina.</p>
+              <p className="text-sm opacity-60">studdy sta elaborando la tua dispensa enciclopedica. Non chiudere la pagina.</p>
            </div>
         )}
 
@@ -223,18 +234,17 @@ export default function Home() {
                 value={apiKey} 
                 onChange={(e) => {
                   setApiKey(e.target.value);
-                  // Opzionale: salva la chiave istantaneamente mentre digiti
                   localStorage.setItem('study_buddy_api_key', e.target.value);
                 }} 
                 className="w-full p-4 rounded-2xl bg-black/20 border border-white/10 outline-none focus:border-blue-500" 
-                placeholder="API Key gsk_..." 
+                placeholder="Google Gemini API Key" 
               />
               <label className="flex flex-col items-center justify-center w-full h-40 rounded-3xl border-2 border-dashed border-white/10 bg-white/5 cursor-pointer hover:bg-white/10 transition-colors">
                 <UploadCloud className="w-10 h-10 mb-3 opacity-50" />
-                <p className="text-sm font-medium">{file ? file.name : "Carica il PDF per l'analisi senza limiti"}</p>
+                <p className="text-sm font-medium">{file ? file.name : "Carica il PDF da studiare"}</p>
                 <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
               </label>
-              <button onClick={startAutoPilot} className="w-full py-4 bg-blue-600 hover:bg-blue-500 transition-colors text-white rounded-2xl font-bold flex justify-center items-center gap-2">Avvia Analisi Accademica <Sparkles className="w-5 h-5" /></button>
+              <button onClick={startAutoPilot} className="w-full py-4 bg-blue-600 hover:bg-blue-500 transition-colors text-white rounded-2xl font-bold flex justify-center items-center gap-2 text-lg">Inizia a studiare <Sparkles className="w-5 h-5" /></button>
             </div>
           </div>
         ) : data && (
