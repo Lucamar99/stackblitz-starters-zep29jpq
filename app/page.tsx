@@ -137,9 +137,36 @@ export default function Home() {
     if (quizSubmitted) return;
     setQuizAnswers(prev => ({ ...prev, [qIndex]: oIndex }));
   };
+
   const RenderMarkdown = ({ content }: { content: string }) => (
-    <div className={`prose prose-lg max-w-none prose-blue ${darkMode ? 'prose-invert' : ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>
+    <div className="w-full text-left">
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm, remarkMath]} 
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          // Titoli più sobri per non rubare spazio al contenuto
+          h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-12 mb-6 border-l-4 border-blue-600 pl-4" {...props} />,
+          h3: ({node, ...props}) => <h3 className="text-xl font-bold text-gray-800 dark:text-white mt-8 mb-4" {...props} />,
+        
+          // Paragrafo: Interlinea "giusta" per testi lunghi (leading-7 invece di loose)
+          p: ({node, ...props}) => (
+            <p className="text-lg leading-7 mb-6 text-gray-700 dark:text-gray-300 text-justify" {...props} />
+          ),
+        
+          // Grassetto pulito senza sfondi colorati (che distraggono in testi lunghi)
+          strong: ({node, ...props}) => <strong className="font-bold text-gray-900 dark:text-white" {...props} />,
+        
+          // Citazioni per teoremi o leggi: più sottili
+          blockquote: ({node, ...props}) => (
+            <blockquote className="border-l-2 border-gray-300 dark:border-gray-700 pl-6 my-8 text-gray-600 dark:text-gray-400 italic" {...props} />
+          ),
+        
+          // Equazioni LaTeX: aggiungiamo un po' di spazio sopra e sotto
+          div: ({node, ...props}) => <div className="my-4 overflow-x-auto" {...props} />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 
