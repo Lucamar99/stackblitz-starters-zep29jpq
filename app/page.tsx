@@ -50,7 +50,6 @@ export default function Home() {
     let accumData = { riassunto: "", flashcards: [] as any[], quiz: [] as any[] };
 
     try {
-      // 1. Chiedi l'Indice
       setLoadingStatus("Sto leggendo l'indice del documento...");
       const formOutline = new FormData();
       formOutline.append('file', file);
@@ -58,13 +57,12 @@ export default function Home() {
       formOutline.append('action', 'outline');
 
       const outlineRes = await fetch('/api/study', { method: 'POST', body: formOutline });
-      if (!outlineRes.ok) throw new Error("Errore lettura PDF");
+      if (!outlineRes.ok) throw new Error("Errore lettura PDF: Vercel Timeout o Limite Google");
       const outlineData = await outlineRes.json();
       const capitoli = outlineData.capitoli || [];
 
       if (capitoli.length === 0) throw new Error("Nessun capitolo trovato.");
 
-      // 2. Analizza ogni capitolo uno alla volta
       for (let i = 0; i < capitoli.length; i++) {
         const cap = capitoli[i];
         setLoadingStatus(`Sto analizzando a fondo: ${cap} (${i+1}/${capitoli.length})`);
@@ -75,16 +73,27 @@ export default function Home() {
         formChapter.append('action', 'chapter');
         formChapter.append('focus', cap);
 
-        const capRes = await fetch('/api/study', { method: 'POST', body: formChapter });
-        if (capRes.ok) {
-          const capData = await capRes.json();
-          // Unisci i dati
-          accumData.riassunto += `\n\n---\n\n## ${cap}\n\n${capData.riassunto}`;
-          accumData.flashcards.push(...capData.flashcards);
-          accumData.quiz.push(...capData.quiz);
-          
-          // Aggiorna lo schermo man mano che scarica i dati!
-          setData({ ...accumData });
+        try {
+          const capRes = await fetch('/api/study', { method: 'POST', body: formChapter });
+          if (capRes.ok) {
+            const capData = await capRes.json();
+            accumData.riassunto += `\n\n---\n\n## 📖 ${cap}\n\n${capData.riassunto}`;
+            accumData.flashcards.push(...capData.flashcards);
+            accumData.quiz.push(...capData.quiz);
+          } else {
+            // Se Vercel taglia il tempo o Google blocca, lo scriviamo nel riassunto!
+            accumData.riassunto += `\n\n---\n\n## 📖 ${cap}\n\n⚠️ *Generazione interrotta per questo capitolo (Limite di tempo server Vercel raggiunto).*`;
+          }
+        } catch (e) {
+          accumData.riassunto += `\n\n---\n\n## 📖 ${cap}\n\n⚠️ *Errore di rete durante la generazione.*`;
+        }
+        
+        setData({ ...accumData });
+
+        // IL TRUCCO: Fai riposare Google per 4 secondi prima del prossimo capitolo!
+        if (i < capitoli.length - 1) {
+          setLoadingStatus(`Pausa di sicurezza... preparo il prossimo capitolo`);
+          await new Promise(r => setTimeout(r, 4000));
         }
       }
 
