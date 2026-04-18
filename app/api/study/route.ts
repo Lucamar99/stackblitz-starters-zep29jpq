@@ -35,15 +35,23 @@ export async function POST(request: Request) {
     }
 
 // FASE 2: Riassunto del capitolo estratto
-    if (action === 'chapter') {
-      const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-      const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
 
-      const promptRiassunto = `
-        Sei un tutor esperto. Analizza questo capitolo estratto: "${focus}".
-        Scrivi un riassunto ESTREMAMENTE DETTAGLIATO e corposo. Includi formule, teoremi e spiegazioni approfondite.
-        Usa Markdown per i titoli e LaTeX ($...$ e $$...$$) per le formule.
-      `;
+if (action === 'chapter') {
+  const modelTesto = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+  
+  const promptRiassunto = `
+    Sei un tutor accademico di alto livello. Il tuo obiettivo è redigere una DISPENSA ESAUSTIVA e DETTAGLIATISSIMA della seguente sezione: "${focus}".
+    
+    LINEE GUIDA PER IL CONTENUTO:
+    - NON SINTETIZZARE: Espandi ogni concetto. Se il testo parla di un teorema, spiegane l'enunciato, la dimostrazione e le implicazioni.
+    - PARAGRAFI CORPOSI: Scrivi paragrafi ampi e articolati che approfondiscano l'argomento. Evita frasi spezzettate o troppo brevi.
+    - COMPLETEZZA: Assicurati che ogni sottotitolo o paragrafo del PDF originale sia sviscerato.
+    - FORMALISMO: Mantieni un tono rigoroso. Includi tutte le formule matematiche usando LaTeX ($...$ e $$...$$).
+    
+    FORMATTAZIONE:
+    - Usa titoli (##) e sottotitoli (###) per organizzare il discorso.
+    - Usa il grassetto (**testo**) solo per i termini tecnici fondamentali.
+    - Usa elenchi puntati solo se strettamente necessario per liste di componenti o dati, preferendo altrimenti l'esposizione discorsiva.`;
       const riassuntoPromise = modelTesto.generateContent([promptRiassunto, pdfPart]);
 
       const promptQuiz = `
