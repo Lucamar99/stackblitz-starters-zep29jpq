@@ -51,13 +51,17 @@ export default function Home() {
     if (savedKey) setApiKey(savedKey);
   }, []);
 
-  // Questo calcola la larghezza dello schermo per far "fittare" il PDF
+  // CALCOLO RESPONSIVE PERFETTO PER IL PDF (Aggiornato per Mobile)
   useEffect(() => {
     if (showPdfModal) {
-      setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 32 : Math.min(window.innerWidth - 100, 900));
-      const handleResize = () => setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 32 : Math.min(window.innerWidth - 100, 900));
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
+      const updateWidth = () => {
+        // Su mobile togliamo 48px (invece di 32) per evitare qualsiasi sbordamento e lasciare respiro ai lati
+        setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 48 : Math.min(window.innerWidth - 120, 900));
+      };
+      
+      updateWidth(); // Calcola subito all'apertura
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
     }
   }, [showPdfModal]);
 
@@ -393,7 +397,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* IL MOTORE REACT-PDF (Funziona anche su iOS!) */}
+              {/* IL MOTORE REACT-PDF */}
               <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8">
                  {viewerWidth > 0 && (
                    <Document
