@@ -43,15 +43,20 @@ export default function Home() {
     }
   }, [isSignedIn]);
 
+  // Caricamento sicuro della storia
   const loadHistory = async () => {
-    const res = await fetch('/api/study');
-    const data = await res.json();
-    setHistory(data);
+    try {
+      const res = await fetch('/api/study');
+      const data = await res.json();
+      setHistory(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Errore caricamento storia:", e);
+      setHistory([]);
+    }
   };
 
-  // Funzione per caricare una vecchia dispensa dall'archivio
+  // Caricamento sicuro da archivio
   const loadFromHistory = (historicalChapter: any) => {
-    // Cerco se c'erano test associati a questo capitolo
     const associatedQA = history.find(item => 
       item.type === 'qa' && 
       item.chapter_title === historicalChapter.chapter_title && 
@@ -61,7 +66,7 @@ export default function Home() {
     let parsedFlashcards = null;
     let parsedQuiz = null;
 
-    if (associatedQA) {
+    if (associatedQA && associatedQA.content) {
       try {
         const parsed = JSON.parse(associatedQA.content);
         parsedFlashcards = parsed.flashcards;
@@ -74,7 +79,7 @@ export default function Home() {
     setChapters([{
       titolo: historicalChapter.chapter_title,
       testo: historicalChapter.content,
-      pdfBlob: null, // Nessun file originale necessario per la lettura
+      pdfBlob: null, 
       flashcards: parsedFlashcards,
       quiz: parsedQuiz
     }]);
@@ -82,13 +87,13 @@ export default function Home() {
   };
 
   const startAutoPilot = async () => {
-    if (!file || !apiKey) return alert("Configura tutto!");
+    if (!file || !apiKey) return alert("Configura API Key e carica il PDF!");
     setLoading(true);
     setChapters([]);
     localStorage.setItem('study_buddy_api_key', apiKey);
 
     try {
-      setLoadingStatus("Analisi Indice...");
+      setLoadingStatus("Analisi Indice in corso...");
       const form = new FormData();
       form.append('file', file);
       form.append('apiKey', apiKey);
@@ -97,17 +102,28 @@ export default function Home() {
       const outlineRes = await fetch('/api/study', { method: 'POST', body: form });
       const outline = await outlineRes.json();
       
+      if (!outline.capitoli) throw new Error(outline.error || "L'IA non ha trovato capitoli validi.");
+
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
+      const totalPages = pdfDoc.getPageCount();
 
       let currentChapters = [];
+      
       for (let i = 0; i < outline.capitoli.length; i++) {
         const cap = outline.capitoli[i];
+        const nextCap = outline.capitoli[i+1];
         setLoadingStatus(`Generazione Dispensa: ${cap.titolo}`);
 
+        // Ripristinato il calcolo completo delle pagine!
+        let startPage = Math.max(0, parseInt(cap.paginaInizio) - 1);
+        let endPage = nextCap ? parseInt(nextCap.paginaInizio) - 2 : totalPages - 1;
+        if (isNaN(endPage) || endPage < startPage) endPage = totalPages - 1;
+
         const newPdf = await PDFDocument.create();
-        const [page] = await newPdf.copyPages(pdfDoc, [Math.max(0, cap.paginaInizio - 1)]);
-        newPdf.addPage(page);
+        const pagesToCopy = Array.from({length: endPage - startPage + 1}, (_, k) => startPage + k);
+        const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
+        copiedPages.forEach(p => newPdf.addPage(p));
         const blob = new Blob([await newPdf.save()], {type: 'application/pdf'});
 
         const formData = new FormData();
@@ -120,23 +136,25 @@ export default function Home() {
         const capRes = await fetch('/api/study', { method: 'POST', body: formData });
         const capData = await capRes.json();
         
-        const newCap = { ...cap, testo: capData.riassunto, pdfBlob: blob, flashcards: null, quiz: null };
+        // Protezione totale contro i crash se l'API fallisce
+        const testoSicuro = capData.riassunto || `⚠️ **Errore Generazione.** Motivo: *${capData.error || "Sconosciuto"}*`;
+        
+        const newCap = { ...cap, testo: testoSicuro, pdfBlob: blob, flashcards: null, quiz: null };
         currentChapters.push(newCap);
         setChapters([...currentChapters]);
         
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 4000)); // Pausa sicurezza Google
       }
-      loadHistory();
-    } catch (e) { console.error(e); }
+      loadHistory(); 
+    } catch (e: any) { 
+      alert("Errore Processo: " + e.message); 
+    }
     setLoading(false);
   };
 
   const generateQA = async (idx: number) => {
     const cap = chapters[idx];
-    if (!cap.pdfBlob) {
-      alert("Non è possibile rigenerare i test da un file d'archivio. Carica di nuovo il PDF originale.");
-      return;
-    }
+    if (!cap.pdfBlob) return alert("Non è possibile rigenerare i test da un file d'archivio. Ricarica il PDF originale.");
     
     setGeneratingQA(idx);
     try {
@@ -151,7 +169,7 @@ export default function Home() {
       const qa = await res.json();
       
       if (qa.error || !qa.flashcards || !qa.quiz) {
-         alert("L'IA non ha risposto correttamente. Riprova.");
+         alert("L'IA ha fallito la creazione del test. Motivo: " + (qa.error || "Formato errato."));
          setGeneratingQA(null);
          return;
       }
@@ -161,30 +179,34 @@ export default function Home() {
       newChapters[idx].quiz = qa.quiz;
       setChapters(newChapters);
       loadHistory();
-    } catch (e) { alert("Errore connessione per Q&A"); }
+    } catch (e) { alert("La connessione al server si è interrotta."); }
     setGeneratingQA(null);
   };
 
-  const RenderMarkdown = ({ content }: { content: string }) => (
-    <div className="prose prose-invert max-w-none text-gray-300">
-      <ReactMarkdown 
-        remarkPlugins={[remarkGfm, remarkMath]} 
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-blue-400 mt-12 mb-6 border-l-4 border-blue-500 pl-4" {...props} />,
-          h3: ({node, ...props}) => <h3 className="text-xl font-bold text-white mt-8 mb-4" {...props} />,
-          p: ({node, ...props}) => <p className="text-lg leading-relaxed mb-6 text-gray-300 text-justify" {...props} />,
-          strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
-          blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-gray-600 pl-6 my-8 text-gray-400 italic" {...props} />,
-          ul: ({node, ...props}) => <ul className="space-y-2 mb-6 ml-4 list-disc text-lg text-gray-300" {...props} />,
-          ol: ({node, ...props}) => <ol className="space-y-2 mb-6 ml-4 list-decimal text-lg text-gray-300" {...props} />,
-          div: ({node, ...props}) => <div className="my-4 overflow-x-auto" {...props} />,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
-  );
+  // Componente Markdown "Antiproiettile"
+  const RenderMarkdown = ({ content }: { content: string }) => {
+    if (!content) return <span className="text-gray-500 italic">Caricamento in corso...</span>;
+    return (
+      <div className="prose prose-invert max-w-none text-gray-300">
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm, remarkMath]} 
+          rehypePlugins={[rehypeKatex]}
+          components={{
+            h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-blue-400 mt-12 mb-6 border-l-4 border-blue-500 pl-4" {...props} />,
+            h3: ({node, ...props}) => <h3 className="text-xl font-bold text-white mt-8 mb-4" {...props} />,
+            p: ({node, ...props}) => <p className="text-lg leading-relaxed mb-6 text-gray-300 text-justify" {...props} />,
+            strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
+            blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-gray-600 pl-6 my-8 text-gray-400 italic" {...props} />,
+            ul: ({node, ...props}) => <ul className="space-y-2 mb-6 ml-4 list-disc text-lg text-gray-300" {...props} />,
+            ol: ({node, ...props}) => <ol className="space-y-2 mb-6 ml-4 list-decimal text-lg text-gray-300" {...props} />,
+            div: ({node, ...props}) => <div className="my-4 overflow-x-auto" {...props} />,
+          }}
+        >
+          {String(content)}
+        </ReactMarkdown>
+      </div>
+    );
+  };
 
   if (!isSignedIn) {
     return (
@@ -203,13 +225,13 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative">
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] rounded-full blur-[120px] opacity-20 bg-indigo-600" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50vw] h-[50vw] rounded-full blur-[100px] opacity-20 bg-blue-500" />
+    <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative overflow-x-hidden">
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-600/20 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-600/20 blur-[100px] rounded-full" />
       </div>
 
-      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-8 md:py-12">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-12">
         <header className="flex justify-between items-center mb-16">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => setChapters([])}>
             <motion.div whileHover={{ rotate: 10, scale: 1.05 }} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -223,7 +245,7 @@ export default function Home() {
         </header>
 
         {loading && (
-           <div className="mb-8 p-8 rounded-[2.5rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-4 backdrop-blur-xl">
+           <div className="mb-8 p-8 rounded-[2.5rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-4 backdrop-blur-xl shadow-2xl">
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
               <p className="font-bold text-xl text-blue-500">{loadingStatus}</p>
            </div>
@@ -308,9 +330,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODALE Q&A - iOS 26 GLASS STYLE CORRETTO E PROTETTO */}
+        {/* MODALE Q&A - 100% PROTETTO DAI CRASH */}
         <AnimatePresence>
-            {activeQA && chapters[activeQA.idx]?.flashcards && (
+            {activeQA && chapters[activeQA.idx] && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/80 backdrop-blur-2xl" onClick={() => setActiveQA(null)} />
                     <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-zinc-900/80 backdrop-blur-3xl rounded-[3rem] border border-white/10 flex flex-col shadow-2xl custom-scrollbar">
@@ -320,7 +342,7 @@ export default function Home() {
                         </div>
                         
                         <div className="p-6 md:p-10">
-                            {activeQA.type === 'flashcards' ? (
+                            {activeQA.type === 'flashcards' && chapters[activeQA.idx].flashcards ? (
                                 <div className="flex flex-col items-center">
                                     <div onClick={() => setIsFlipped(!isFlipped)} className="w-full max-w-xl h-96 relative cursor-pointer perspective-2000 group">
                                         <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 100, damping: 20 }} className="w-full h-full preserve-3d">
@@ -340,7 +362,7 @@ export default function Home() {
                                         <button onClick={() => {setCardIndex(Math.min(chapters[activeQA.idx].flashcards.length - 1, cardIndex + 1)); setIsFlipped(false)}} className="p-4 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"><ChevronRight className="w-6 h-6" /></button>
                                     </div>
                                 </div>
-                            ) : (
+                            ) : activeQA.type === 'quiz' && chapters[activeQA.idx].quiz ? (
                                 <div className="space-y-8">
                                     {chapters[activeQA.idx].quiz.map((q: any, i: number) => (
                                         <div key={i} className="p-8 bg-black/40 border border-white/10 rounded-[2.5rem] space-y-6 shadow-lg">
@@ -349,7 +371,7 @@ export default function Home() {
                                               <RenderMarkdown content={q.domanda} />
                                             </div>
                                             <div className="grid gap-4">
-                                                {q.opzioni.map((opt: string, oi: number) => {
+                                                {q.opzioni?.map((opt: string, oi: number) => {
                                                     const qKey = `${activeQA.idx}-${i}`;
                                                     const isSelected = quizAnswers[qKey] === oi;
                                                     const submitted = quizSubmitted[activeQA.idx];
@@ -380,6 +402,8 @@ export default function Home() {
                                       </button>
                                     )}
                                 </div>
+                            ) : (
+                                <div className="text-center p-10 text-gray-400">Dati non trovati per questa sezione. Ricarica la dispensa.</div>
                             )}
                         </div>
                     </motion.div>
