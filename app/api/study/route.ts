@@ -12,7 +12,7 @@ const supabase = createClient(
 export async function POST(request: Request) {
   try {
     const { userId } = auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) return NextResponse.json({ error: "Effettua il login" }, { status: 401 });
 
     const data = await request.formData();
     const apiKey = data.get('apiKey') as string;
@@ -25,49 +25,53 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const pdfPart = { inlineData: { data: Buffer.from(bytes).toString('base64'), mimeType: "application/pdf" } };
 
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-
+    // FASE 1: INDICE (PULIZIA TOTALE)
     if (action === 'outline') {
-      const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
-      const res = await modelJSON.generateContent(["Identifica i capitoli del PDF. JSON: { \"capitoli\": [{ \"titolo\": \"...\", \"paginaInizio\": 1 }] }", pdfPart]);
-      return NextResponse.json(JSON.parse(res.response.text()));
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-3.1-flash-lite-preview",
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      
+      const prompt = `Analizza l'indice di questo PDF. 
+      Restituisci un JSON con questa struttura esatta: 
+      {"capitoli": [{"titolo": "Titolo", "paginaInizio": 1}]}`;
+      
+      const res = await model.generateContent([prompt, pdfPart]);
+      const rawJson = res.response.text();
+      
+      // Pulizia di emergenza se l'IA aggiunge ```json o altro
+      const cleanJson = rawJson.replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+      return NextResponse.json(JSON.parse(cleanJson));
     }
 
+    // FASE 2: DISPENSA
     if (action === 'chapter') {
-      const prompt = `Redigi dispensa accademica esaustiva per: ${focus}. Usa Markdown pulito e LaTeX ($..$ o $$..$$) solo per formule. NO documenti raw .tex.`;
+      const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+      const prompt = `Sei un professore. Scrivi una dispensa ESAUSTIVA su: ${focus}. Usa Markdown e LaTeX ($..$) per le formule.`;
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
       await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content, type: 'summary' }]);
-
       return NextResponse.json({ riassunto: content });
     }
 
+    // FASE 3: TEST
     if (action === 'generate_qa') {
-      const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
-      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. Devi restituire ESCLUSIVAMENTE un JSON con questa struttura esatta: { "flashcards": [ { "domanda": "...", "risposta": "..." } ], "quiz": [ { "domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": 0, "spiegazione": "..." } ] }`;
-      
+      const modelJSON = genAI.getGenerativeModel({ 
+        model: "gemini-3.1-flash-lite-preview",
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. JSON: {"flashcards": [...], "quiz": [...]}`;
       const result = await modelJSON.generateContent([prompt, pdfPart]);
-      let rawText = result.response.text();
-      
-      // Pulizia estrema del JSON da eventuali impurità di Gemini
-      rawText = rawText.replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
-      
-      let qaData;
-      try {
-        qaData = JSON.parse(rawText);
-      } catch (e) {
-        qaData = JSON.parse(rawText.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
-      }
+      const cleanQA = result.response.text().replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
 
-      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: JSON.stringify(qaData), type: 'qa' }]);
-
-      return NextResponse.json(qaData);
+      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: cleanQA, type: 'qa' }]);
+      return NextResponse.json(JSON.parse(cleanQA));
     }
 
-    return NextResponse.json({ error: "Invalid action" });
+    return NextResponse.json({ error: "Azione non valida" });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Errore AI: " + error.message }, { status: 500 });
   }
 }
 
