@@ -38,7 +38,6 @@ export async function POST(request: Request) {
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
-      // SALVATAGGIO SU SUPABASE
       await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content, type: 'summary' }]);
 
       return NextResponse.json({ riassunto: content });
@@ -46,13 +45,24 @@ export async function POST(request: Request) {
 
     if (action === 'generate_qa') {
       const modelJSON = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview", generationConfig: { responseMimeType: "application/json" } });
-      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. JSON: { "flashcards": [...], "quiz": [...] }`;
+      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. Devi restituire ESCLUSIVAMENTE un JSON con questa struttura esatta: { "flashcards": [ { "domanda": "...", "risposta": "..." } ], "quiz": [ { "domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": 0, "spiegazione": "..." } ] }`;
+      
       const result = await modelJSON.generateContent([prompt, pdfPart]);
-      const content = result.response.text();
+      let rawText = result.response.text();
+      
+      // Pulizia estrema del JSON da eventuali impurità di Gemini
+      rawText = rawText.replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+      
+      let qaData;
+      try {
+        qaData = JSON.parse(rawText);
+      } catch (e) {
+        qaData = JSON.parse(rawText.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
+      }
 
-      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content, type: 'qa' }]);
+      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: JSON.stringify(qaData), type: 'qa' }]);
 
-      return NextResponse.json(JSON.parse(content));
+      return NextResponse.json(qaData);
     }
 
     return NextResponse.json({ error: "Invalid action" });
