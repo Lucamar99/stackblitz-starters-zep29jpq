@@ -5,7 +5,7 @@ import { UserButton, SignInButton, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
-  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X 
+  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,10 +14,17 @@ import rehypeKatex from 'rehype-katex';
 import { PDFDocument } from 'pdf-lib';
 import 'katex/dist/katex.min.css';
 
+// Importazione sicura del lettore PDF
+import { Document, Page, pdfjs } from 'react-pdf';
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+}
+
 export default function Home() {
   const { isSignedIn } = useUser();
   const [apiKey, setApiKey] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [chapters, setChapters] = useState<any[]>([]);
@@ -31,6 +38,12 @@ export default function Home() {
   const [quizSubmitted, setQuizSubmitted] = useState<Record<number, boolean>>({});
   const [generatingQA, setGeneratingQA] = useState<number | null>(null);
 
+  // Stati PDF Modal
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [viewerWidth, setViewerWidth] = useState(0);
+
   useEffect(() => {
     document.documentElement.classList.add('dark');
   }, []);
@@ -43,19 +56,25 @@ export default function Home() {
     }
   }, [isSignedIn]);
 
-  // Caricamento sicuro della storia
+  useEffect(() => {
+    if (showPdfModal && typeof window !== 'undefined') {
+      const updateWidth = () => setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 48 : Math.min(window.innerWidth - 120, 900));
+      updateWidth();
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+  }, [showPdfModal]);
+
   const loadHistory = async () => {
     try {
       const res = await fetch('/api/study');
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Errore caricamento storia:", e);
       setHistory([]);
     }
   };
 
-  // Caricamento sicuro da archivio
   const loadFromHistory = (historicalChapter: any) => {
     const associatedQA = history.find(item => 
       item.type === 'qa' && 
@@ -72,7 +91,7 @@ export default function Home() {
         parsedFlashcards = parsed.flashcards;
         parsedQuiz = parsed.quiz;
       } catch (e) {
-        console.error("Errore lettura QA storici");
+        console.error("Errore lettura test storici");
       }
     }
 
@@ -90,6 +109,7 @@ export default function Home() {
     if (!file || !apiKey) return alert("Configura API Key e carica il PDF!");
     setLoading(true);
     setChapters([]);
+    setPdfUrl(URL.createObjectURL(file));
     localStorage.setItem('study_buddy_api_key', apiKey);
 
     try {
@@ -102,7 +122,7 @@ export default function Home() {
       const outlineRes = await fetch('/api/study', { method: 'POST', body: form });
       const outline = await outlineRes.json();
       
-      if (!outline.capitoli) throw new Error(outline.error || "L'IA non ha trovato capitoli validi.");
+      if (!outline.capitoli) throw new Error("Capitoli non trovati.");
 
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
@@ -115,7 +135,6 @@ export default function Home() {
         const nextCap = outline.capitoli[i+1];
         setLoadingStatus(`Generazione Dispensa: ${cap.titolo}`);
 
-        // Ripristinato il calcolo completo delle pagine!
         let startPage = Math.max(0, parseInt(cap.paginaInizio) - 1);
         let endPage = nextCap ? parseInt(nextCap.paginaInizio) - 2 : totalPages - 1;
         if (isNaN(endPage) || endPage < startPage) endPage = totalPages - 1;
@@ -136,14 +155,12 @@ export default function Home() {
         const capRes = await fetch('/api/study', { method: 'POST', body: formData });
         const capData = await capRes.json();
         
-        // Protezione totale contro i crash se l'API fallisce
-        const testoSicuro = capData.riassunto || `⚠️ **Errore Generazione.** Motivo: *${capData.error || "Sconosciuto"}*`;
+        const testoSicuro = capData.riassunto || `⚠️ **Errore Generazione.** Motivo: Sconosciuto`;
         
-        const newCap = { ...cap, testo: testoSicuro, pdfBlob: blob, flashcards: null, quiz: null };
-        currentChapters.push(newCap);
+        currentChapters.push({ ...cap, testo: testoSicuro, pdfBlob: blob, flashcards: null, quiz: null });
         setChapters([...currentChapters]);
         
-        await new Promise(r => setTimeout(r, 4000)); // Pausa sicurezza Google
+        await new Promise(r => setTimeout(r, 3000));
       }
       loadHistory(); 
     } catch (e: any) { 
@@ -154,7 +171,7 @@ export default function Home() {
 
   const generateQA = async (idx: number) => {
     const cap = chapters[idx];
-    if (!cap.pdfBlob) return alert("Non è possibile rigenerare i test da un file d'archivio. Ricarica il PDF originale.");
+    if (!cap.pdfBlob) return alert("Ricarica il PDF originale per generare nuovi test.");
     
     setGeneratingQA(idx);
     try {
@@ -169,7 +186,7 @@ export default function Home() {
       const qa = await res.json();
       
       if (qa.error || !qa.flashcards || !qa.quiz) {
-         alert("L'IA ha fallito la creazione del test. Motivo: " + (qa.error || "Formato errato."));
+         alert("L'IA ha fallito la formattazione. Riprova.");
          setGeneratingQA(null);
          return;
       }
@@ -179,13 +196,12 @@ export default function Home() {
       newChapters[idx].quiz = qa.quiz;
       setChapters(newChapters);
       loadHistory();
-    } catch (e) { alert("La connessione al server si è interrotta."); }
+    } catch (e) { alert("Errore di connessione."); }
     setGeneratingQA(null);
   };
 
-  // Componente Markdown "Antiproiettile"
   const RenderMarkdown = ({ content }: { content: string }) => {
-    if (!content) return <span className="text-gray-500 italic">Caricamento in corso...</span>;
+    if (!content) return <span className="text-gray-500 italic">...</span>;
     return (
       <div className="prose prose-invert max-w-none text-gray-300">
         <ReactMarkdown 
@@ -240,6 +256,9 @@ export default function Home() {
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter lowercase">studdy<span className="text-blue-500">.</span></h1>
           </div>
           <div className="flex items-center gap-4">
+            {pdfUrl && chapters.length > 0 && (
+              <button onClick={() => setShowPdfModal(true)} className="hidden md:flex px-4 py-2 rounded-full text-sm font-bold bg-white/10 text-white hover:bg-white/20 transition-all items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>
+            )}
             <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-10 h-10 rounded-full border-2 border-white/10" } }} />
           </div>
         </header>
@@ -278,7 +297,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        ) : data && (
+        ) : (
           <div className="max-w-4xl mx-auto space-y-6">
              <button onClick={() => setChapters([])} className="mb-4 text-blue-400 font-bold hover:text-blue-300 transition-colors flex items-center gap-2"><ChevronLeft className="w-4 h-4"/> Torna alla Home</button>
              {chapters.map((cap: any, idx: number) => (
@@ -330,7 +349,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODALE Q&A - 100% PROTETTO DAI CRASH */}
+        {/* MODALE Q&A - BLINDATO CONTRO I CRASH */}
         <AnimatePresence>
             {activeQA && chapters[activeQA.idx] && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -348,11 +367,11 @@ export default function Home() {
                                         <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 100, damping: 20 }} className="w-full h-full preserve-3d">
                                             <div className="absolute inset-0 backface-hidden bg-white/5 border border-white/10 rounded-[3rem] p-10 flex flex-col justify-center items-center text-center shadow-2xl group-hover:bg-white/10 transition-colors">
                                                 <span className="text-sm text-blue-400 font-black uppercase tracking-widest mb-6">Fronte - Domanda</span>
-                                                <div className="text-2xl font-bold text-white"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.domanda || "Caricamento..."} /></div>
+                                                <div className="text-2xl font-bold text-white"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.domanda || ""} /></div>
                                             </div>
                                             <div className="absolute inset-0 backface-hidden rotate-y-180 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[3rem] p-10 flex flex-col justify-center items-center text-center shadow-2xl border border-blue-400/30 overflow-y-auto custom-scrollbar">
                                                 <span className="text-sm text-white/60 font-black uppercase tracking-widest mb-6 mt-auto">Retro - Risposta</span>
-                                                <div className="text-xl font-medium text-white mb-auto"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.risposta || "Caricamento..."} /></div>
+                                                <div className="text-xl font-medium text-white mb-auto"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.risposta || ""} /></div>
                                             </div>
                                         </motion.div>
                                     </div>
@@ -368,7 +387,7 @@ export default function Home() {
                                         <div key={i} className="p-8 bg-black/40 border border-white/10 rounded-[2.5rem] space-y-6 shadow-lg">
                                             <div className="text-xl font-bold flex gap-4 text-white">
                                               <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 text-sm flex-shrink-0">{i+1}</span>
-                                              <RenderMarkdown content={q.domanda} />
+                                              <RenderMarkdown content={q.domanda || ""} />
                                             </div>
                                             <div className="grid gap-4">
                                                 {q.opzioni?.map((opt: string, oi: number) => {
@@ -383,7 +402,7 @@ export default function Home() {
                                                     }
                                                     return (
                                                         <button key={oi} onClick={() => !submitted && setQuizAnswers({...quizAnswers, [qKey]: oi})} className={`w-full p-5 rounded-2xl text-left border transition-all duration-300 ${btnClass}`}>
-                                                          <RenderMarkdown content={opt} />
+                                                          <RenderMarkdown content={opt || ""} />
                                                         </button>
                                                     );
                                                 })}
@@ -391,7 +410,7 @@ export default function Home() {
                                             {quizSubmitted[activeQA.idx] && (
                                               <div className="p-6 bg-blue-900/30 border border-blue-500/30 rounded-2xl mt-4">
                                                 <strong className="text-blue-400 mb-2 block uppercase text-xs tracking-widest">Spiegazione</strong>
-                                                <RenderMarkdown content={q.spiegazione} />
+                                                <RenderMarkdown content={q.spiegazione || ""} />
                                               </div>
                                             )}
                                         </div>
@@ -403,15 +422,54 @@ export default function Home() {
                                     )}
                                 </div>
                             ) : (
-                                <div className="text-center p-10 text-gray-400">Dati non trovati per questa sezione. Ricarica la dispensa.</div>
+                                <div className="text-center p-10 text-gray-400">Dati non trovati.</div>
                             )}
                         </div>
                     </motion.div>
                 </div>
             )}
         </AnimatePresence>
-      </div>
 
+        {/* MODALE PDF VIEWER */}
+        <AnimatePresence>
+          {showPdfModal && pdfUrl && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8 bg-black/90 backdrop-blur-xl">
+              <div className="relative w-full h-full max-w-5xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border-0 md:border border-white/10 flex flex-col shadow-2xl">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10 shadow-md">
+                  <span className="font-bold flex items-center gap-2 text-white">
+                    <FileText className="w-5 h-5 text-blue-500"/>
+                    <span className="hidden md:inline">Documento Originale</span>
+                    <span className="md:hidden">Lettore PDF</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-colors flex items-center gap-2 font-bold text-sm">
+                      <Download className="w-4 h-4" /> <span className="hidden md:inline">Scarica</span>
+                    </a>
+                    <button onClick={() => setShowPdfModal(false)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8">
+                   {viewerWidth > 0 && (
+                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />} className="flex flex-col items-center">
+                       <Page pageNumber={pageNumber} width={viewerWidth} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-2xl rounded-md overflow-hidden bg-white" />
+                     </Document>
+                   )}
+                   {numPages && (
+                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full flex items-center gap-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10 z-50">
+                       <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"><ChevronLeft className="w-6 h-6" /></button>
+                       <span className="font-mono font-bold whitespace-nowrap">{pageNumber} / {numPages}</span>
+                       <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"><ChevronRight className="w-6 h-6" /></button>
+                     </div>
+                   )}
+                </div>
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
+
+      </div>
       <style dangerouslySetInnerHTML={{__html: `
         .perspective-2000 { perspective: 2000px; }
         .preserve-3d { transform-style: preserve-3d; }
