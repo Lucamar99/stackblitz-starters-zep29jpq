@@ -33,7 +33,7 @@ const RenderMarkdown = ({ content }: { content: string }) => {
           blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-gray-600 pl-6 my-8 text-gray-400 italic" {...props} />,
           ul: ({node, ...props}) => <ul className="space-y-2 mb-6 ml-4 list-disc text-lg text-gray-300" {...props} />,
           ol: ({node, ...props}) => <ol className="space-y-2 mb-6 ml-4 list-decimal text-lg text-gray-300" {...props} />,
-          div: ({node, ...props}) => <div className="my-4 overflow-x-auto" {...props} />,
+          div: ({node, ...props}) => <div className="my-4 overflow-x-auto custom-scrollbar" {...props} />,
         }}
       >
         {String(content)}
@@ -63,7 +63,10 @@ export default function Home() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  
+  // Gestione dinamica delle larghezze del PDF (Mobile vs Desktop)
   const [viewerWidth, setViewerWidth] = useState(0);
+  const [inlineViewerWidth, setInlineViewerWidth] = useState(0);
 
   useEffect(() => {
     document.documentElement.classList.add('dark');
@@ -81,13 +84,25 @@ export default function Home() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    if (showPdfModal && typeof window !== 'undefined') {
-      const updateWidth = () => setViewerWidth(window.innerWidth < 768 ? window.innerWidth - 48 : Math.min(window.innerWidth - 120, 900));
-      updateWidth();
-      window.addEventListener('resize', updateWidth);
-      return () => window.removeEventListener('resize', updateWidth);
+    if (typeof window !== 'undefined') {
+      const updateWidths = () => {
+        // Larghezza per il modale (Mobile)
+        setViewerWidth(window.innerWidth - 48);
+        
+        // Larghezza per la visualizzazione Split-Screen (Desktop)
+        if (window.innerWidth >= 1280) { // xl
+          const container = Math.min(window.innerWidth, 1400); 
+          setInlineViewerWidth((container - 64) * 0.45 - 40);
+        } else if (window.innerWidth >= 1024) { // lg
+          const container = Math.min(window.innerWidth, 1400);
+          setInlineViewerWidth((container - 64) * 0.5 - 40);
+        }
+      };
+      updateWidths();
+      window.addEventListener('resize', updateWidths);
+      return () => window.removeEventListener('resize', updateWidths);
     }
-  }, [showPdfModal]);
+  }, [chapters, pdfUrl]);
 
   const loadHistory = async () => {
     try {
@@ -215,12 +230,12 @@ export default function Home() {
         });
         
         setChapters([...currentChapters]);
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3500));
       }
       loadHistory();
     } catch (e: any) { 
       alert("ATTENZIONE: " + e.message); 
-      setChapters([]); // Failsafe: se fallisce, resetta per tornare alla Home
+      setChapters([]); 
     }
     setLoading(false);
   };
@@ -303,7 +318,8 @@ export default function Home() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-600 blur-[100px] rounded-full" />
       </div>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-12">
+      {/* Ampliato il max-width per far respirare il layout a due colonne */}
+      <div className="relative z-10 max-w-[1400px] mx-auto px-4 py-8 md:py-12">
         <header className="flex justify-between items-center mb-16">
           <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setChapters([]); setPdfUrl(null); }}>
             <motion.div whileHover={{ rotate: 10, scale: 1.05 }} className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -312,14 +328,14 @@ export default function Home() {
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tighter lowercase">studdy<span className="text-blue-500">.</span></h1>
           </div>
           <div className="flex items-center gap-4">
+            {/* Il bottone del PDF appare nel menu in alto SOLO sui dispositivi mobili */}
             {pdfUrl && chapters.length > 0 && (
-              <button onClick={() => setShowPdfModal(true)} className="hidden md:flex px-4 py-2 rounded-full text-sm font-bold bg-white/10 text-white hover:bg-white/20 transition-all items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>
+              <button onClick={() => setShowPdfModal(true)} className="flex lg:hidden px-4 py-2 rounded-full text-sm font-bold bg-white/10 text-white hover:bg-white/20 transition-all items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>
             )}
             <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-10 h-10 rounded-full border-2 border-white/10" } }} />
           </div>
         </header>
 
-        {/* STATO 1: CARICAMENTO (Se attivo, mostra SOLO questo) */}
         {loading && (
            <div className="mb-8 p-10 rounded-[3rem] bg-blue-600/10 border border-blue-500/20 flex flex-col items-center justify-center text-center space-y-6 backdrop-blur-xl shadow-2xl">
               <Loader2 className="w-16 h-16 text-blue-500 animate-spin" />
@@ -328,7 +344,6 @@ export default function Home() {
            </div>
         )}
 
-        {/* STATO 2: HOME (Visibile se NON carica e NON ci sono capitoli) */}
         {!loading && chapters.length === 0 && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl space-y-6">
@@ -376,60 +391,91 @@ export default function Home() {
           </div>
         )}
 
-        {/* STATO 3: RISULTATI (Visibile se NON carica e ci SONO capitoli) */}
+        {/* STATO RISULTATI: LAYOUT SPLIT-SCREEN SU DESKTOP */}
         {!loading && chapters.length > 0 && (
-          <div className="max-w-4xl mx-auto space-y-6">
-             <button onClick={() => { setChapters([]); setPdfUrl(null); }} className="mb-6 text-blue-400 font-bold hover:text-blue-300 transition-colors flex items-center gap-2"><ChevronLeft className="w-5 h-5"/> Torna alla Home</button>
-             {chapters.map((cap: any, idx: number) => (
-                <div key={idx} className="rounded-[2.5rem] border border-white/10 bg-white/5 overflow-hidden backdrop-blur-2xl shadow-xl">
-                    <button onClick={() => setExpandedChapter(expandedChapter === idx ? null : idx)} className="w-full p-6 md:p-8 flex justify-between items-center text-left hover:bg-white/10 transition-colors">
-                        <span className="text-xl md:text-2xl font-bold flex items-center gap-4">
-                            <span className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 text-lg shadow-inner">{idx + 1}</span>
-                            {cap.titolo}
-                        </span>
-                        <ChevronDown className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${expandedChapter === idx ? 'rotate-180' : ''}`} />
-                    </button>
-                    
-                    <AnimatePresence>
-                        {expandedChapter === idx && (
-                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="px-6 md:px-10 pb-10">
-                                <div className="border-t border-white/10 pt-8">
-                                    <RenderMarkdown content={cap.testo} />
-                                    
-                                    <div className="mt-16 p-8 md:p-10 rounded-[2.5rem] bg-gradient-to-br from-indigo-900/40 to-blue-900/40 border border-indigo-500/30 flex flex-col items-center text-center space-y-6 shadow-2xl relative overflow-hidden">
-                                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
-                                        <div className="relative z-10 w-20 h-20 rounded-3xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner backdrop-blur-md"><BrainCircuit className="w-10 h-10" /></div>
-                                        <div className="relative z-10">
-                                            <h4 className="text-2xl font-extrabold mb-2 text-white">Area Ripasso Interattiva</h4>
-                                            <p className="text-indigo-200/70 font-medium">10 Flashcards + Test Universitario</p>
-                                        </div>
-                                        
-                                        {!cap.quiz ? (
-                                            <button 
-                                                disabled={generatingQA === idx}
-                                                onClick={() => generateQA(idx)}
-                                                className="relative z-10 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 rounded-full font-bold flex items-center gap-3 transition-all disabled:opacity-50 shadow-[0_0_30px_rgba(79,70,229,0.4)]"
-                                            >
-                                                {generatingQA === idx ? <Loader2 className="animate-spin w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
-                                                Genera Materiale di Studio
-                                            </button>
-                                        ) : (
-                                            <div className="relative z-10 flex flex-wrap justify-center gap-4 w-full mt-4">
-                                                <button onClick={() => { setActiveQA({idx, type: 'flashcards'}); setCardIndex(0); }} className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-full font-bold transition-all shadow-lg backdrop-blur-md">Studia Flashcards</button>
-                                                <button onClick={() => { setActiveQA({idx, type: 'quiz'}); }} className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)]">Inizia Simulazione</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+          <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
+             
+             {/* COLONNA SINISTRA: Visualizzatore PDF Fisso (Solo PC) */}
+             <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
+                <div className="p-5 border-b border-white/10 flex justify-between items-center bg-black/40">
+                   <span className="font-bold flex items-center gap-2 text-white">
+                      <FileText className="w-5 h-5 text-blue-500"/>
+                      <span className="truncate max-w-[200px] xl:max-w-[300px]">{file?.name || "Documento Originale"}</span>
+                   </span>
+                   {numPages && (
+                     <div className="flex items-center gap-3 bg-white/10 rounded-full px-4 py-1.5 border border-white/5">
+                        <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="hover:text-blue-400 disabled:opacity-30 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
+                        <span className="font-mono text-sm font-bold text-blue-100">{pageNumber} / {numPages}</span>
+                        <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="hover:text-blue-400 disabled:opacity-30 transition-colors"><ChevronRight className="w-5 h-5"/></button>
+                     </div>
+                   )}
                 </div>
-             ))}
+                <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-800/50 p-4 flex justify-center items-start">
+                   {pdfUrl && inlineViewerWidth > 0 ? (
+                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />}>
+                         <Page pageNumber={pageNumber} width={inlineViewerWidth} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-2xl rounded-xl overflow-hidden" />
+                      </Document>
+                   ) : (
+                      <div className="mt-20 text-gray-500 italic">Caricamento visualizzatore...</div>
+                   )}
+                </div>
+             </div>
+
+             {/* COLONNA DESTRA: Area di Studio */}
+             <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
+                 <button onClick={() => { setChapters([]); setPdfUrl(null); }} className="mb-2 text-blue-400 font-bold hover:text-blue-300 transition-colors flex items-center gap-2"><ChevronLeft className="w-5 h-5"/> Torna all'Archivio</button>
+                 
+                 {chapters.map((cap: any, idx: number) => (
+                    <div key={idx} className="rounded-[2.5rem] border border-white/10 bg-white/5 overflow-hidden backdrop-blur-2xl shadow-xl">
+                        <button onClick={() => setExpandedChapter(expandedChapter === idx ? null : idx)} className="w-full p-6 md:p-8 flex justify-between items-center text-left hover:bg-white/10 transition-colors">
+                            <span className="text-xl md:text-2xl font-bold flex items-center gap-4">
+                                <span className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 text-lg shadow-inner flex-shrink-0">{idx + 1}</span>
+                                {cap.titolo}
+                            </span>
+                            <ChevronDown className={`w-6 h-6 text-gray-400 transition-transform duration-300 ${expandedChapter === idx ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {expandedChapter === idx && (
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="px-6 md:px-10 pb-10">
+                                    <div className="border-t border-white/10 pt-8">
+                                        <RenderMarkdown content={cap.testo} />
+                                        
+                                        <div className="mt-16 p-8 md:p-10 rounded-[2.5rem] bg-gradient-to-br from-indigo-900/40 to-blue-900/40 border border-indigo-500/30 flex flex-col items-center text-center space-y-6 shadow-2xl relative overflow-hidden">
+                                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+                                            <div className="relative z-10 w-20 h-20 rounded-3xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner backdrop-blur-md"><BrainCircuit className="w-10 h-10" /></div>
+                                            <div className="relative z-10">
+                                                <h4 className="text-2xl font-extrabold mb-2 text-white">Area Ripasso Interattiva</h4>
+                                                <p className="text-indigo-200/70 font-medium">10 Flashcards + Test Universitario</p>
+                                            </div>
+                                            
+                                            {!cap.quiz ? (
+                                                <button 
+                                                    disabled={generatingQA === idx}
+                                                    onClick={() => generateQA(idx)}
+                                                    className="relative z-10 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 rounded-full font-bold flex items-center gap-3 transition-all disabled:opacity-50 shadow-[0_0_30px_rgba(79,70,229,0.4)]"
+                                                >
+                                                    {generatingQA === idx ? <Loader2 className="animate-spin w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                                                    Genera Materiale di Studio
+                                                </button>
+                                            ) : (
+                                                <div className="relative z-10 flex flex-wrap justify-center gap-4 w-full mt-4">
+                                                    <button onClick={() => { setActiveQA({idx, type: 'flashcards'}); setCardIndex(0); }} className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-full font-bold transition-all shadow-lg backdrop-blur-md">Studia Flashcards</button>
+                                                    <button onClick={() => { setActiveQA({idx, type: 'quiz'}); }} className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)]">Inizia Simulazione</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                 ))}
+             </div>
           </div>
         )}
 
-        {/* MODALE Q&A */}
+        {/* MODALE Q&A - Invariato */}
         <AnimatePresence>
             {activeQA && chapters[activeQA.idx] && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -510,16 +556,15 @@ export default function Home() {
             )}
         </AnimatePresence>
 
-        {/* MODALE PDF VIEWER */}
+        {/* MODALE PDF VIEWER - SOLO SU MOBILE (Schermi < lg) */}
         <AnimatePresence>
           {showPdfModal && pdfUrl && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-8 bg-black/90 backdrop-blur-xl">
+            <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-0 md:p-8 bg-black/90 backdrop-blur-xl">
               <div className="relative w-full h-full max-w-5xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border-0 md:border border-white/10 flex flex-col shadow-2xl">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10 shadow-md">
                   <span className="font-bold flex items-center gap-2 text-white">
                     <FileText className="w-5 h-5 text-blue-500"/>
-                    <span className="hidden md:inline">Documento Originale</span>
-                    <span className="md:hidden">Lettore PDF</span>
+                    <span>Lettore PDF</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-colors flex items-center gap-2 font-bold text-sm">
@@ -530,7 +575,7 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8">
+                <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8 custom-scrollbar">
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />} className="flex flex-col items-center">
                        <Page pageNumber={pageNumber} width={viewerWidth} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-2xl rounded-md overflow-hidden bg-white" />
