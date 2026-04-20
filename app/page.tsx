@@ -5,7 +5,7 @@ import { UserButton, SignInButton, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
-  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2
+  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -308,10 +308,7 @@ export default function Home() {
   }
 
   return (
-    // IL SEGRETO E' QUI: Ho tolto 'overflow-x-hidden' che rompeva l'effetto sticky
     <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative">
-      
-      {/* Gli effetti blur di sfondo ora sono racchiusi qui in modo sicuro */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-20 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-600 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-600 blur-[100px] rounded-full" />
@@ -327,7 +324,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             {pdfUrl && chapters.length > 0 && (
-              <button onClick={() => setShowPdfModal(true)} className="flex lg:hidden px-4 py-2 rounded-full text-sm font-bold bg-white/10 text-white hover:bg-white/20 transition-all items-center gap-2"><FileText className="w-4 h-4" /> PDF</button>
+              <button onClick={() => setShowPdfModal(true)} className="flex lg:hidden px-4 py-2 rounded-full text-sm font-bold bg-white/10 text-white hover:bg-white/20 transition-all items-center gap-2"><Layers className="w-4 h-4" /> Vedi PDF</button>
             )}
             <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-10 h-10 rounded-full border-2 border-white/10" } }} />
           </div>
@@ -342,7 +339,7 @@ export default function Home() {
            </div>
         )}
 
-        {/* HOME (Nuovo Studio + Archivio) */}
+        {/* HOME */}
         {!loading && chapters.length === 0 && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl space-y-6">
@@ -390,44 +387,55 @@ export default function Home() {
           </div>
         )}
 
-        {/* RISULTATI: LAYOUT SPLIT-SCREEN ALLINEATO PERFETTAMENTE */}
+        {/* RISULTATI: LAYOUT SPLIT-SCREEN */}
         {!loading && chapters.length > 0 && (
           <div className="flex flex-col w-full">
              
-             {/* Bottone Globale allineato a sinistra */}
              <button onClick={() => { setChapters([]); setPdfUrl(null); }} className="self-start mb-6 text-blue-400 font-bold hover:text-blue-300 transition-colors flex items-center gap-2">
                 <ChevronLeft className="w-5 h-5"/> Torna all'Archivio
              </button>
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: Visualizzatore PDF FISSO ALLO SCHERMO */}
+                 {/* COLONNA SINISTRA: IL NUOVO VISUALIZZATORE PDF "PIÙ CARINO" */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
-                    <div className="p-5 border-b border-white/10 flex justify-between items-center bg-black/40">
-                       <span className="font-bold flex items-center gap-2 text-white">
-                          <FileText className="w-5 h-5 text-blue-500"/>
+                    {/* Header raffinato */}
+                    <div className="p-5 border-b border-white/5 flex justify-between items-center bg-black/40">
+                       <span className="font-bold flex items-center gap-3 text-white">
+                          <div className="p-2.5 bg-blue-500/10 rounded-xl border border-blue-500/20">
+                            <FileText className="w-4 h-4 text-blue-400"/>
+                          </div>
                           <span className="truncate max-w-[200px] xl:max-w-[300px]">{file?.name || "Documento Originale"}</span>
                        </span>
                        {numPages && (
-                         <div className="flex items-center gap-3 bg-white/10 rounded-full px-4 py-1.5 border border-white/5">
-                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="hover:text-blue-400 disabled:opacity-30 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
-                            <span className="font-mono text-sm font-bold text-blue-100">{pageNumber} / {numPages}</span>
-                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="hover:text-blue-400 disabled:opacity-30 transition-colors"><ChevronRight className="w-5 h-5"/></button>
+                         <div className="flex items-center gap-1 bg-black/50 rounded-full p-1 border border-white/10 shadow-inner">
+                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronLeft className="w-4 h-4"/></button>
+                            <span className="font-mono text-sm font-bold text-gray-300 px-3">{pageNumber} <span className="text-gray-600 font-normal">/</span> {numPages}</span>
+                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronRight className="w-4 h-4"/></button>
                          </div>
                        )}
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar bg-zinc-800/50 p-4 flex justify-center items-start">
+                    {/* Area Documento incastonata */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20 p-6 flex justify-center items-start">
                        {pdfUrl && inlineViewerWidth > 0 ? (
-                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />}>
-                             <Page pageNumber={pageNumber} width={inlineViewerWidth} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-2xl rounded-xl overflow-hidden" />
+                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex flex-col items-center mt-32 gap-4"><Loader2 className="w-10 h-10 animate-spin text-blue-500/50" /><span className="text-sm font-medium text-gray-500">Apertura documento...</span></div>}>
+                             <AnimatePresence mode="wait">
+                               <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="p-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-[0_0_40px_rgba(0,0,0,0.3)]">
+                                  {/* Sottraggo 16 dal width per compensare il padding p-2 (8px + 8px) della cornice in vetro */}
+                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 16} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
+                               </motion.div>
+                             </AnimatePresence>
                           </Document>
                        ) : (
-                          <div className="mt-20 text-gray-500 italic">Caricamento visualizzatore...</div>
+                          <div className="mt-32 flex flex-col items-center gap-4 opacity-50">
+                             <FileText className="w-12 h-12 text-gray-500" />
+                             <span className="text-gray-500 font-medium text-sm">Lettore in preparazione...</span>
+                          </div>
                        )}
                     </div>
                  </div>
 
-                 {/* COLONNA DESTRA: Area di Studio (SCORREVOLE) */}
+                 {/* COLONNA DESTRA: Area di Studio */}
                  <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
                      {chapters.map((cap: any, idx: number) => (
                         <div key={idx} className="rounded-[2.5rem] border border-white/10 bg-white/5 overflow-hidden backdrop-blur-2xl shadow-xl">
@@ -561,40 +569,44 @@ export default function Home() {
             )}
         </AnimatePresence>
 
-        {/* MODALE PDF VIEWER - SOLO SU MOBILE (Schermi < lg) */}
+        {/* MODALE PDF VIEWER - MOBILE REFINEMENT */}
         <AnimatePresence>
           {showPdfModal && pdfUrl && (
-            <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-0 md:p-8 bg-black/90 backdrop-blur-xl">
-              <div className="relative w-full h-full max-w-5xl md:rounded-[3rem] overflow-hidden bg-zinc-900 border-0 md:border border-white/10 flex flex-col shadow-2xl">
-                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-zinc-900 z-10 shadow-md">
-                  <span className="font-bold flex items-center gap-2 text-white">
-                    <FileText className="w-5 h-5 text-blue-500"/>
+            <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-4 bg-black/90 backdrop-blur-2xl">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full h-full max-w-5xl rounded-[2.5rem] overflow-hidden bg-zinc-900/60 border border-white/10 flex flex-col shadow-2xl">
+                <div className="p-5 border-b border-white/5 flex justify-between items-center bg-black/40">
+                  <span className="font-bold flex items-center gap-3 text-white">
+                    <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20"><FileText className="w-4 h-4 text-blue-400"/></div>
                     <span>Lettore PDF</span>
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 transition-colors flex items-center gap-2 font-bold text-sm">
-                      <Download className="w-4 h-4" /> <span className="hidden md:inline">Scarica</span>
+                      <Download className="w-4 h-4" /> <span className="hidden sm:inline">Scarica</span>
                     </a>
-                    <button onClick={() => setShowPdfModal(false)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
+                    <button onClick={() => setShowPdfModal(false)} className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-zinc-800 relative overflow-y-auto flex justify-center pb-24 pt-4 md:pt-8 custom-scrollbar">
+                <div className="flex-1 w-full bg-black/20 relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
-                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-12 h-12 animate-spin text-blue-500 mt-20" />} className="flex flex-col items-center">
-                       <Page pageNumber={pageNumber} width={viewerWidth} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-2xl rounded-md overflow-hidden bg-white" />
+                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex flex-col items-center mt-32 gap-4"><Loader2 className="w-10 h-10 animate-spin text-blue-500/50" /><span className="text-sm font-medium text-gray-500">Caricamento in corso...</span></div>} className="flex flex-col items-center">
+                        <AnimatePresence mode="wait">
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="p-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl mb-8">
+                              <Page pageNumber={pageNumber} width={viewerWidth - 16} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
+                           </motion.div>
+                        </AnimatePresence>
                      </Document>
                    )}
                    {numPages && (
-                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-6 py-3 rounded-full flex items-center gap-6 text-white shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-white/10 z-50">
-                       <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"><ChevronLeft className="w-6 h-6" /></button>
-                       <span className="font-mono font-bold whitespace-nowrap">{pageNumber} / {numPages}</span>
-                       <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-2 hover:bg-white/20 rounded-full disabled:opacity-30 transition-colors"><ChevronRight className="w-6 h-6" /></button>
+                     <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-2xl px-2 py-2 rounded-full flex items-center gap-2 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50">
+                       <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-3 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-300 hover:text-white"><ChevronLeft className="w-5 h-5" /></button>
+                       <span className="font-mono text-sm font-bold text-gray-200 px-4">{pageNumber} <span className="text-gray-500 font-normal">/</span> {numPages}</span>
+                       <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-3 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-300 hover:text-white"><ChevronRight className="w-5 h-5" /></button>
                      </div>
                    )}
                 </div>
-              </div>
+              </motion.div>
             </div>
           )}
         </AnimatePresence>
