@@ -308,8 +308,11 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative overflow-x-hidden">
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-20">
+    // IL SEGRETO E' QUI: Ho tolto 'overflow-x-hidden' che rompeva l'effetto sticky
+    <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative">
+      
+      {/* Gli effetti blur di sfondo ora sono racchiusi qui in modo sicuro */}
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-20 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-600 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-600 blur-[100px] rounded-full" />
       </div>
@@ -398,7 +401,7 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: Visualizzatore PDF */}
+                 {/* COLONNA SINISTRA: Visualizzatore PDF FISSO ALLO SCHERMO */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
                     <div className="p-5 border-b border-white/10 flex justify-between items-center bg-black/40">
                        <span className="font-bold flex items-center gap-2 text-white">
@@ -424,7 +427,7 @@ export default function Home() {
                     </div>
                  </div>
 
-                 {/* COLONNA DESTRA: Area di Studio */}
+                 {/* COLONNA DESTRA: Area di Studio (SCORREVOLE) */}
                  <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
                      {chapters.map((cap: any, idx: number) => (
                         <div key={idx} className="rounded-[2.5rem] border border-white/10 bg-white/5 overflow-hidden backdrop-blur-2xl shadow-xl">
