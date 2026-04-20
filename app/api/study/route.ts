@@ -25,20 +25,28 @@ export async function POST(request: Request) {
 
     let publicUrl = data.get('pdfUrl') as string;
 
-    // Salvataggio File
+    // Estraiamo subito i bytes: serve sia a Supabase che a Gemini
+    const bytes = await file.arrayBuffer();
+
+    // ================= FASE 0: SALVATAGGIO FILE =================
     if (file && !publicUrl && action === 'outline') {
       const fileName = `${userId}/${Date.now()}_${pdfName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      const { error: uploadError } = await supabase.storage.from('pdfs').upload(fileName, file);
+      
+      // Carichiamo i 'bytes' invece del 'file' per evitare che Next.js crei file da 0 byte
+      const { error: uploadError } = await supabase.storage.from('pdfs').upload(fileName, bytes, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+
       if (!uploadError) {
         const { data: urlData } = supabase.storage.from('pdfs').getPublicUrl(fileName);
         publicUrl = urlData.publicUrl;
       } else {
-        console.error("Storage upload fallito, procedo senza file:", uploadError);
+        console.error("Storage upload fallito:", uploadError);
       }
     }
 
     const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const bytes = await file.arrayBuffer();
     const pdfPart = { inlineData: { data: Buffer.from(bytes).toString('base64'), mimeType: "application/pdf" } };
 
     // ================= FASE 1: INDICE =================
@@ -76,7 +84,6 @@ export async function POST(request: Request) {
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
-      // Correzione: Uso la sintassi ufficiale di Supabase per gestire gli errori senza .catch()
       const { error: dbError } = await supabase.from('study_data').insert([{ 
         user_id: userId, 
         pdf_name: pdfName, 
@@ -119,7 +126,6 @@ export async function POST(request: Request) {
         }))
       };
 
-      // Correzione: Uso la sintassi ufficiale di Supabase per gestire gli errori senza .catch()
       const { error: dbError } = await supabase.from('study_data').insert([{ 
         user_id: userId, 
         pdf_name: pdfName, 
