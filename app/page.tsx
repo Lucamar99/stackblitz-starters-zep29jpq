@@ -88,10 +88,10 @@ export default function Home() {
         setViewerWidth(window.innerWidth - 48);
         if (window.innerWidth >= 1280) {
           const container = Math.min(window.innerWidth, 1400); 
-          setInlineViewerWidth((container - 64) * 0.45); // Rimosso il margine artificiale
+          setInlineViewerWidth((container - 64) * 0.45); 
         } else if (window.innerWidth >= 1024) {
           const container = Math.min(window.innerWidth, 1400);
-          setInlineViewerWidth((container - 64) * 0.5); // Rimosso il margine artificiale
+          setInlineViewerWidth((container - 64) * 0.5); 
         }
       };
       updateWidths();
@@ -388,7 +388,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* RISULTATI: LAYOUT SPLIT-SCREEN REFINEMENT */}
+        {/* RISULTATI: LAYOUT SPLIT-SCREEN */}
         {!loading && chapters.length > 0 && (
           <div className="flex flex-col w-full">
              
@@ -398,11 +398,12 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: Visualizzatore PDF Ultra-Clean */}
-                 <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
+                 {/* COLONNA SINISTRA: Visualizzatore PDF Integrato nel Glassmorphism */}
+                 {/* Sostituito bg-zinc-900/40 con bg-white/5 per matchare la colonna destra */}
+                 <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-xl overflow-hidden">
                     
-                    {/* Header Minimal */}
-                    <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
+                    {/* Header Minimal e Integrato */}
+                    <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-black/20">
                        <span className="font-bold flex items-center gap-3 text-white">
                           <div className="p-2 bg-blue-500/20 rounded-xl"><FileText className="w-4 h-4 text-blue-400"/></div>
                           <span className="truncate max-w-[200px] xl:max-w-[300px] text-sm tracking-wide">{file?.name || "Documento"}</span>
@@ -416,8 +417,8 @@ export default function Home() {
                        )}
                     </div>
 
-                    {/* Area Documento A Filo (Nessuna Cornice Esterna) */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-[#0a0a0a]">
+                    {/* Area Documento TRASPARENTE: Nessun quadrato nero, lascia vedere il background dell'app */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
                        {pdfUrl && inlineViewerWidth > 0 ? (
                           <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-8 h-8 animate-spin text-blue-500 mt-32 opacity-50" />}>
                              <AnimatePresence mode="wait">
@@ -427,9 +428,8 @@ export default function Home() {
                                   animate={{ opacity: 1, scale: 1 }} 
                                   exit={{ opacity: 0, scale: 0.98 }} 
                                   transition={{ duration: 0.15 }} 
-                                  className="rounded-xl overflow-hidden shadow-2xl border border-white/5"
+                                  className="rounded-xl overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10"
                                >
-                                  {/* Larghezza ricalcolata per riempire lo spazio sottraendo solo il margine laterale di base */}
                                   <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} renderTextLayer={false} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
@@ -578,8 +578,8 @@ export default function Home() {
         <AnimatePresence>
           {showPdfModal && pdfUrl && (
             <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-4 bg-black/90 backdrop-blur-2xl">
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full h-full max-w-5xl rounded-[2.5rem] overflow-hidden bg-zinc-900/60 border border-white/10 flex flex-col shadow-2xl">
-                <div className="p-5 border-b border-white/5 flex justify-between items-center bg-black/40">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full h-full max-w-5xl rounded-[2.5rem] overflow-hidden bg-white/5 border border-white/10 flex flex-col shadow-2xl">
+                <div className="p-5 border-b border-white/10 flex justify-between items-center bg-black/20">
                   <span className="font-bold flex items-center gap-3 text-white">
                     <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20"><FileText className="w-4 h-4 text-blue-400"/></div>
                     <span>Lettore PDF</span>
@@ -593,12 +593,12 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-[#0a0a0a] relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
+                <div className="flex-1 w-full bg-transparent relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex flex-col items-center mt-32 gap-4"><Loader2 className="w-10 h-10 animate-spin text-blue-500/50" /><span className="text-sm font-medium text-gray-500">Caricamento in corso...</span></div>} className="flex flex-col items-center">
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 backdrop-blur-md shadow-2xl mb-8">
-                              <Page pageNumber={pageNumber} width={viewerWidth - 32} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-2xl mb-8 overflow-hidden">
+                              <Page pageNumber={pageNumber} width={viewerWidth - 32} renderTextLayer={false} renderAnnotationLayer={false} />
                            </motion.div>
                         </AnimatePresence>
                      </Document>
