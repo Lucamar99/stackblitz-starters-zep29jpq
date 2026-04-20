@@ -76,7 +76,17 @@ export async function POST(request: Request) {
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
-      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content, type: 'summary', pdf_url: publicUrl }]).catch(e => console.error("DB Error:", e));
+      // Correzione: Uso la sintassi ufficiale di Supabase per gestire gli errori senza .catch()
+      const { error: dbError } = await supabase.from('study_data').insert([{ 
+        user_id: userId, 
+        pdf_name: pdfName, 
+        chapter_title: focus, 
+        content, 
+        type: 'summary', 
+        pdf_url: publicUrl 
+      }]);
+      
+      if (dbError) console.error("Errore Salvataggio Dispensa:", dbError);
       
       return NextResponse.json({ riassunto: content });
     }
@@ -109,7 +119,17 @@ export async function POST(request: Request) {
         }))
       };
 
-      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: JSON.stringify(normalizedData), type: 'qa', pdf_url: publicUrl }]).catch(e => console.error("DB Error:", e));
+      // Correzione: Uso la sintassi ufficiale di Supabase per gestire gli errori senza .catch()
+      const { error: dbError } = await supabase.from('study_data').insert([{ 
+        user_id: userId, 
+        pdf_name: pdfName, 
+        chapter_title: focus, 
+        content: JSON.stringify(normalizedData), 
+        type: 'qa', 
+        pdf_url: publicUrl 
+      }]);
+
+      if (dbError) console.error("Errore Salvataggio QA:", dbError);
       
       return NextResponse.json(normalizedData);
     }
