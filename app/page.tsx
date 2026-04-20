@@ -5,7 +5,7 @@ import { UserButton, SignInButton, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
-  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download
+  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -99,7 +99,27 @@ export default function Home() {
     }
   };
 
-  // LOGICA DI RAGGRUPPAMENTO PER PDF
+  const deletePdf = async (pdfName: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita che il clic sul cestino apra anche il documento
+    if (!confirm(`Sei sicuro di voler eliminare "${pdfName}" e tutto il suo materiale di studio? Questa azione non può essere annullata.`)) return;
+
+    try {
+      const res = await fetch(`/api/study?pdfName=${encodeURIComponent(pdfName)}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadHistory();
+        // Se stavi visualizzando proprio quel file, ti riportiamo alla home
+        if (chapters.length > 0 && history.find(h => h.pdf_name === pdfName && h.chapter_title === chapters[0].titolo)) {
+          setChapters([]);
+        }
+      } else {
+        alert("Errore durante l'eliminazione.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Si è verificato un errore di connessione.");
+    }
+  };
+
   const groupedHistory = history.reduce((acc: any, curr: any) => {
     if (curr.type === 'summary') {
       if (!acc[curr.pdf_name]) acc[curr.pdf_name] = [];
@@ -108,14 +128,11 @@ export default function Home() {
     return acc;
   }, {});
 
-  // CARICAMENTO DELL'INTERO PDF DALL'ARCHIVIO
   const loadFromHistory = (pdfName: string) => {
-    // 1. Prendo tutti i capitoli di questo PDF e li metto in ordine cronologico (dal cap 1 all'ultimo)
     const fileChapters = history
         .filter(h => h.type === 'summary' && h.pdf_name === pdfName)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    // 2. Ricostruisco l'array chapters associando i test se esistono
     const loadedChapters = fileChapters.map(historicalChapter => {
       const associatedQA = history.find(item => 
         item.type === 'qa' && 
@@ -139,7 +156,7 @@ export default function Home() {
       return {
         titolo: historicalChapter.chapter_title,
         testo: historicalChapter.content,
-        pdfBlob: null, // Non abbiamo il PDF raw per quelli vecchi
+        pdfBlob: null,
         flashcards: parsedFlashcards,
         quiz: parsedQuiz
       };
@@ -316,12 +333,23 @@ export default function Home() {
                 ) : (
                   Object.entries(groupedHistory).map(([pdfName, caps]: [string, any], i) => (
                     <div key={i} onClick={() => loadFromHistory(pdfName)} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 cursor-pointer transition-all group flex flex-col gap-2">
-                      <div className="font-bold text-white group-hover:text-indigo-300 transition-colors line-clamp-2 leading-snug flex items-start gap-3">
-                        <FileText className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
-                        {pdfName}
-                      </div>
-                      <div className="text-xs opacity-50 uppercase tracking-widest pl-8 font-medium text-blue-300">
-                        {caps.length} Capitoli Analizzati
+                      <div className="flex justify-between items-start w-full">
+                        <div>
+                          <div className="font-bold text-white group-hover:text-indigo-300 transition-colors line-clamp-2 leading-snug flex items-start gap-3">
+                            <FileText className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                            {pdfName}
+                          </div>
+                          <div className="text-xs opacity-50 uppercase tracking-widest pl-8 font-medium text-blue-300 mt-2">
+                            {caps.length} Capitoli Analizzati
+                          </div>
+                        </div>
+                        <button 
+                          onClick={(e) => deletePdf(pdfName, e)} 
+                          className="p-3 rounded-full hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors flex-shrink-0 ml-2"
+                          title="Elimina PDF"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
                     </div>
                   ))
