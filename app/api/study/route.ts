@@ -25,7 +25,6 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const pdfPart = { inlineData: { data: Buffer.from(bytes).toString('base64'), mimeType: "application/pdf" } };
 
-    // FASE 1: INDICE
     if (action === 'outline') {
       const model = genAI.getGenerativeModel({ 
         model: "gemini-3.1-flash-lite-preview",
@@ -42,7 +41,6 @@ export async function POST(request: Request) {
         parsedData = JSON.parse(cleanJson.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
       }
 
-      // Normalizzatore Indice (gestisce eventuali Maiuscole)
       const capitoliNormalizzati = (parsedData.capitoli || parsedData.Capitoli || []).map((c: any) => ({
          titolo: c.titolo || c.Titolo || "Capitolo Senza Titolo",
          paginaInizio: c.paginaInizio || c.PaginaInizio || c.pagina || c.Pagina || 1
@@ -51,7 +49,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ capitoli: capitoliNormalizzati });
     }
 
-    // FASE 2: DISPENSA
     if (action === 'chapter') {
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
       const prompt = `Sei un professore. Scrivi una dispensa ESAUSTIVA su: ${focus}. Usa Markdown e LaTeX ($..$) per le formule. NO documenti .tex.`;
@@ -62,7 +59,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ riassunto: content });
     }
 
-    // FASE 3: TEST (CON NORMALIZZATORE ESTREMO)
     if (action === 'generate_qa') {
       const modelJSON = genAI.getGenerativeModel({ 
         model: "gemini-3.1-flash-lite-preview",
@@ -81,7 +77,6 @@ export async function POST(request: Request) {
          parsedQA = JSON.parse(cleanQA.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
       }
 
-      // IL TRADUTTORE: Qualsiasi cosa scriva Gemini, noi la forziamo in minuscolo perfetto per React
       const normalizedData = {
         flashcards: (parsedQA.flashcards || parsedQA.Flashcards || []).map((f: any) => ({
           domanda: f.domanda || f.Domanda || f.question || f.Question || "Domanda mancante dall'IA",
@@ -110,4 +105,30 @@ export async function GET() {
   if (!userId) return NextResponse.json([]);
   const { data } = await supabase.from('study_data').select('*').eq('user_id', userId).order('created_at', { ascending: false });
   return NextResponse.json(data || []);
+}
+
+// NUOVA FUNZIONE: Elimina i dati dal Database
+export async function DELETE(request: Request) {
+  try {
+    const { userId } = auth();
+    if (!userId) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+
+    const { searchParams } = new URL(request.url);
+    const pdfName = searchParams.get('pdfName');
+
+    if (!pdfName) return NextResponse.json({ error: "Nome PDF mancante" }, { status: 400 });
+
+    // Elimina tutte le righe di questo utente che hanno questo nome PDF
+    const { error } = await supabase
+      .from('study_data')
+      .delete()
+      .eq('user_id', userId)
+      .eq('pdf_name', pdfName);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
