@@ -1,4 +1,3 @@
-"use client";
 const startAutoPilot = async () => {
     if (!file || !apiKey) return alert("Configura API Key e carica il PDF!");
     setLoading(true);
