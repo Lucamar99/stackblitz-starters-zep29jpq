@@ -88,10 +88,10 @@ export default function Home() {
         setViewerWidth(window.innerWidth - 48);
         if (window.innerWidth >= 1280) {
           const container = Math.min(window.innerWidth, 1400); 
-          setInlineViewerWidth((container - 64) * 0.45 - 40);
+          setInlineViewerWidth((container - 64) * 0.45); // Rimosso il margine artificiale
         } else if (window.innerWidth >= 1024) {
           const container = Math.min(window.innerWidth, 1400);
-          setInlineViewerWidth((container - 64) * 0.5 - 40);
+          setInlineViewerWidth((container - 64) * 0.5); // Rimosso il margine artificiale
         }
       };
       updateWidths();
@@ -226,7 +226,7 @@ export default function Home() {
         });
         
         setChapters([...currentChapters]);
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3500));
       }
       loadHistory();
     } catch (e: any) { 
@@ -309,6 +309,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#000000] text-white font-sans pb-20 relative">
+      
       <div className="fixed inset-0 z-0 pointer-events-none opacity-20 overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-blue-600 blur-[120px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-600 blur-[100px] rounded-full" />
@@ -339,7 +340,7 @@ export default function Home() {
            </div>
         )}
 
-        {/* HOME */}
+        {/* HOME (Nuovo Studio + Archivio) */}
         {!loading && chapters.length === 0 && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl space-y-6">
@@ -387,7 +388,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* RISULTATI: LAYOUT SPLIT-SCREEN */}
+        {/* RISULTATI: LAYOUT SPLIT-SCREEN REFINEMENT */}
         {!loading && chapters.length > 0 && (
           <div className="flex flex-col w-full">
              
@@ -397,40 +398,44 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: IL NUOVO VISUALIZZATORE PDF "PIÙ CARINO" */}
-                 <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden">
-                    {/* Header raffinato */}
-                    <div className="p-5 border-b border-white/5 flex justify-between items-center bg-black/40">
+                 {/* COLONNA SINISTRA: Visualizzatore PDF Ultra-Clean */}
+                 <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-zinc-900/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
+                    
+                    {/* Header Minimal */}
+                    <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
                        <span className="font-bold flex items-center gap-3 text-white">
-                          <div className="p-2.5 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                            <FileText className="w-4 h-4 text-blue-400"/>
-                          </div>
-                          <span className="truncate max-w-[200px] xl:max-w-[300px]">{file?.name || "Documento Originale"}</span>
+                          <div className="p-2 bg-blue-500/20 rounded-xl"><FileText className="w-4 h-4 text-blue-400"/></div>
+                          <span className="truncate max-w-[200px] xl:max-w-[300px] text-sm tracking-wide">{file?.name || "Documento"}</span>
                        </span>
                        {numPages && (
-                         <div className="flex items-center gap-1 bg-black/50 rounded-full p-1 border border-white/10 shadow-inner">
-                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronLeft className="w-4 h-4"/></button>
-                            <span className="font-mono text-sm font-bold text-gray-300 px-3">{pageNumber} <span className="text-gray-600 font-normal">/</span> {numPages}</span>
-                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronRight className="w-4 h-4"/></button>
+                         <div className="flex items-center gap-2">
+                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronLeft className="w-5 h-5"/></button>
+                            <span className="font-mono text-xs font-bold text-gray-400 px-1">{pageNumber} / {numPages}</span>
+                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-gray-400 hover:text-white"><ChevronRight className="w-5 h-5"/></button>
                          </div>
                        )}
                     </div>
-                    {/* Area Documento incastonata */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20 p-6 flex justify-center items-start">
+
+                    {/* Area Documento A Filo (Nessuna Cornice Esterna) */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-[#0a0a0a]">
                        {pdfUrl && inlineViewerWidth > 0 ? (
-                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex flex-col items-center mt-32 gap-4"><Loader2 className="w-10 h-10 animate-spin text-blue-500/50" /><span className="text-sm font-medium text-gray-500">Apertura documento...</span></div>}>
+                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-8 h-8 animate-spin text-blue-500 mt-32 opacity-50" />}>
                              <AnimatePresence mode="wait">
-                               <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="p-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-[0_0_40px_rgba(0,0,0,0.3)]">
-                                  {/* Sottraggo 16 dal width per compensare il padding p-2 (8px + 8px) della cornice in vetro */}
-                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 16} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
+                               <motion.div 
+                                  key={pageNumber} 
+                                  initial={{ opacity: 0, scale: 0.98 }} 
+                                  animate={{ opacity: 1, scale: 1 }} 
+                                  exit={{ opacity: 0, scale: 0.98 }} 
+                                  transition={{ duration: 0.15 }} 
+                                  className="rounded-xl overflow-hidden shadow-2xl border border-white/5"
+                               >
+                                  {/* Larghezza ricalcolata per riempire lo spazio sottraendo solo il margine laterale di base */}
+                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} renderTextLayer={false} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
                           </Document>
                        ) : (
-                          <div className="mt-32 flex flex-col items-center gap-4 opacity-50">
-                             <FileText className="w-12 h-12 text-gray-500" />
-                             <span className="text-gray-500 font-medium text-sm">Lettore in preparazione...</span>
-                          </div>
+                          <div className="mt-32 text-gray-500 text-sm">Caricamento...</div>
                        )}
                     </div>
                  </div>
@@ -588,12 +593,12 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-black/20 relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
+                <div className="flex-1 w-full bg-[#0a0a0a] relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex flex-col items-center mt-32 gap-4"><Loader2 className="w-10 h-10 animate-spin text-blue-500/50" /><span className="text-sm font-medium text-gray-500">Caricamento in corso...</span></div>} className="flex flex-col items-center">
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="p-2 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl mb-8">
-                              <Page pageNumber={pageNumber} width={viewerWidth - 16} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 backdrop-blur-md shadow-2xl mb-8">
+                              <Page pageNumber={pageNumber} width={viewerWidth - 32} renderTextLayer={false} renderAnnotationLayer={false} className="rounded-xl overflow-hidden" />
                            </motion.div>
                         </AnimatePresence>
                      </Document>
