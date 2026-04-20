@@ -51,7 +51,15 @@ export async function POST(request: Request) {
 
     if (action === 'chapter') {
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-      const prompt = `Sei un professore. Scrivi una dispensa ESAUSTIVA su: ${focus}. Usa Markdown e LaTeX ($..$) per le formule. NO documenti .tex.`;
+      
+      // PROMPT AGGIORNATO: Regole matematiche severissime
+      const prompt = `Sei un professore universitario. Scrivi una dispensa ESTREMAMENTE ESAUSTIVA su: ${focus}. 
+      REGOLE DI FORMATTAZIONE TASSATIVE:
+      1. Scrivi in Markdown puro.
+      2. Usa ESCLUSIVAMENTE il simbolo del dollaro per le formule matematiche LaTeX: $ formula $ per le formule in linea e $$ formula $$ per quelle a blocco.
+      3. ASSOLUTAMENTE VIETATO usare i backtick (\`) per racchiudere le formule matematiche o i simboli.
+      4. NON creare documenti .tex raw.`;
+      
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
@@ -64,7 +72,14 @@ export async function POST(request: Request) {
         model: "gemini-3.1-flash-lite-preview",
         generationConfig: { responseMimeType: "application/json" }
       });
-      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. Devi usare ESCLUSIVAMENTE chiavi in MINUSCOLO. Struttura: {"flashcards": [{"domanda": "...", "risposta": "..."}], "quiz": [{"domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": 0, "spiegazione": "..."}]}`;
+      
+      // PROMPT AGGIORNATO anche per i quiz
+      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. 
+      REGOLE: 
+      - Usa ESCLUSIVAMENTE chiavi in MINUSCOLO. 
+      - Per la matematica usa SOLO i simboli del dollaro ($ formula $), MAI i backtick (\`).
+      Struttura: {"flashcards": [{"domanda": "...", "risposta": "..."}], "quiz": [{"domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": 0, "spiegazione": "..."}]}`;
+      
       const result = await modelJSON.generateContent([prompt, pdfPart]);
       
       const rawText = result.response.text();
@@ -107,7 +122,6 @@ export async function GET() {
   return NextResponse.json(data || []);
 }
 
-// NUOVA FUNZIONE: Elimina i dati dal Database
 export async function DELETE(request: Request) {
   try {
     const { userId } = auth();
@@ -118,7 +132,6 @@ export async function DELETE(request: Request) {
 
     if (!pdfName) return NextResponse.json({ error: "Nome PDF mancante" }, { status: 400 });
 
-    // Elimina tutte le righe di questo utente che hanno questo nome PDF
     const { error } = await supabase
       .from('study_data')
       .delete()
