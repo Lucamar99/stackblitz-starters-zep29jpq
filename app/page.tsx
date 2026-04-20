@@ -14,12 +14,10 @@ import rehypeKatex from 'rehype-katex';
 import { PDFDocument } from 'pdf-lib';
 import 'katex/dist/katex.min.css';
 
-// 1. IMPORTAZIONE DINAMICA: Risolve il crash di Vercel (SSR: false)
 import dynamic from 'next/dynamic';
 const Document = dynamic(() => import('react-pdf').then((mod) => mod.Document), { ssr: false });
 const Page = dynamic(() => import('react-pdf').then((mod) => mod.Page), { ssr: false });
 
-// 2. COMPONENTE MARKDOWN ESTRATTO: Più leggero e sicuro
 const RenderMarkdown = ({ content }: { content: string }) => {
   if (!content) return <span className="text-gray-500 italic">...</span>;
   return (
@@ -62,7 +60,6 @@ export default function Home() {
   const [quizSubmitted, setQuizSubmitted] = useState<Record<number, boolean>>({});
   const [generatingQA, setGeneratingQA] = useState<number | null>(null);
 
-  // Stati PDF Modal
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -70,8 +67,6 @@ export default function Home() {
 
   useEffect(() => {
     document.documentElement.classList.add('dark');
-    
-    // Inizializza il worker del PDF in modo sicuro solo sul Client
     import('react-pdf').then(({ pdfjs }) => {
       pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
     });
@@ -104,33 +99,53 @@ export default function Home() {
     }
   };
 
-  const loadFromHistory = (historicalChapter: any) => {
-    const associatedQA = history.find(item => 
-      item.type === 'qa' && 
-      item.chapter_title === historicalChapter.chapter_title && 
-      item.pdf_name === historicalChapter.pdf_name
-    );
-
-    let parsedFlashcards = null;
-    let parsedQuiz = null;
-
-    if (associatedQA && associatedQA.content) {
-      try {
-        const parsed = JSON.parse(associatedQA.content);
-        parsedFlashcards = parsed.flashcards;
-        parsedQuiz = parsed.quiz;
-      } catch (e) {
-        console.error("Errore lettura test storici");
-      }
+  // LOGICA DI RAGGRUPPAMENTO PER PDF
+  const groupedHistory = history.reduce((acc: any, curr: any) => {
+    if (curr.type === 'summary') {
+      if (!acc[curr.pdf_name]) acc[curr.pdf_name] = [];
+      acc[curr.pdf_name].push(curr);
     }
+    return acc;
+  }, {});
 
-    setChapters([{
-      titolo: historicalChapter.chapter_title,
-      testo: historicalChapter.content,
-      pdfBlob: null, 
-      flashcards: parsedFlashcards,
-      quiz: parsedQuiz
-    }]);
+  // CARICAMENTO DELL'INTERO PDF DALL'ARCHIVIO
+  const loadFromHistory = (pdfName: string) => {
+    // 1. Prendo tutti i capitoli di questo PDF e li metto in ordine cronologico (dal cap 1 all'ultimo)
+    const fileChapters = history
+        .filter(h => h.type === 'summary' && h.pdf_name === pdfName)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    // 2. Ricostruisco l'array chapters associando i test se esistono
+    const loadedChapters = fileChapters.map(historicalChapter => {
+      const associatedQA = history.find(item => 
+        item.type === 'qa' && 
+        item.chapter_title === historicalChapter.chapter_title && 
+        item.pdf_name === historicalChapter.pdf_name
+      );
+
+      let parsedFlashcards = null;
+      let parsedQuiz = null;
+
+      if (associatedQA && associatedQA.content) {
+        try {
+          const parsed = JSON.parse(associatedQA.content);
+          parsedFlashcards = parsed.flashcards;
+          parsedQuiz = parsed.quiz;
+        } catch (e) {
+          console.error("Errore lettura test storici");
+        }
+      }
+
+      return {
+        titolo: historicalChapter.chapter_title,
+        testo: historicalChapter.content,
+        pdfBlob: null, // Non abbiamo il PDF raw per quelli vecchi
+        flashcards: parsedFlashcards,
+        quiz: parsedQuiz
+      };
+    });
+
+    setChapters(loadedChapters);
     setExpandedChapter(0);
   };
 
@@ -142,37 +157,37 @@ export default function Home() {
     localStorage.setItem('study_buddy_api_key', apiKey);
 
     try {
-      setLoadingStatus("Analisi Indice in corso...");
+      setLoadingStatus("Fase 1: Analisi dell'indice...");
       const form = new FormData();
       form.append('file', file);
       form.append('apiKey', apiKey);
       form.append('action', 'outline');
 
       const outlineRes = await fetch('/api/study', { method: 'POST', body: form });
-      const outline = await outlineRes.json();
+      const outlineData = await outlineRes.json();
       
-      if (outline.error) throw new Error(outline.error);
-      if (!outline.capitoli) throw new Error("L'IA non ha trovato capitoli validi.");
+      if (outlineData.error) throw new Error(outlineData.error);
+      if (!outlineData.capitoli || !Array.isArray(outlineData.capitoli)) {
+        throw new Error("L'IA non ha formattato correttamente l'indice. Riprova.");
+      }
 
       const fileBuffer = await file.arrayBuffer();
       const pdfDoc = await PDFDocument.load(fileBuffer);
       const totalPages = pdfDoc.getPageCount();
 
       let currentChapters = [];
-      
-      for (let i = 0; i < outline.capitoli.length; i++) {
-        const cap = outline.capitoli[i];
-        const nextCap = outline.capitoli[i+1];
-        setLoadingStatus(`Generazione Dispensa: ${cap.titolo}`);
+      for (let i = 0; i < outlineData.capitoli.length; i++) {
+        const cap = outlineData.capitoli[i];
+        const nextCap = outlineData.capitoli[i+1];
+        setLoadingStatus(`Fase 2: Generazione Dispensa - ${cap.titolo}`);
 
-        let startPage = Math.max(0, parseInt(cap.paginaInizio) - 1);
-        let endPage = nextCap ? parseInt(nextCap.paginaInizio) - 2 : totalPages - 1;
-        if (isNaN(endPage) || endPage < startPage) endPage = totalPages - 1;
+        let start = Math.max(0, parseInt(cap.paginaInizio) - 1);
+        let end = nextCap ? parseInt(nextCap.paginaInizio) - 2 : totalPages - 1;
+        if (isNaN(end) || end < start) end = totalPages - 1;
 
         const newPdf = await PDFDocument.create();
-        const pagesToCopy = Array.from({length: endPage - startPage + 1}, (_, k) => startPage + k);
-        const copiedPages = await newPdf.copyPages(pdfDoc, pagesToCopy);
-        copiedPages.forEach(p => newPdf.addPage(p));
+        const pages = await newPdf.copyPages(pdfDoc, Array.from({length: end - start + 1}, (_, k) => start + k));
+        pages.forEach(p => newPdf.addPage(p));
         const blob = new Blob([await newPdf.save()], {type: 'application/pdf'});
 
         const formData = new FormData();
@@ -185,16 +200,20 @@ export default function Home() {
         const capRes = await fetch('/api/study', { method: 'POST', body: formData });
         const capData = await capRes.json();
         
-        const testoSicuro = capData.riassunto || `⚠️ **Errore Generazione.** Motivo: Sconosciuto`;
+        currentChapters.push({ 
+          ...cap, 
+          testo: capData.riassunto || "Errore nel contenuto.", 
+          pdfBlob: blob, 
+          flashcards: null, 
+          quiz: null 
+        });
         
-        currentChapters.push({ ...cap, testo: testoSicuro, pdfBlob: blob, flashcards: null, quiz: null });
         setChapters([...currentChapters]);
-        
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 4000));
       }
-      loadHistory(); 
+      loadHistory();
     } catch (e: any) { 
-      alert("Errore Processo: " + e.message); 
+      alert("ATTENZIONE: " + e.message); 
     }
     setLoading(false);
   };
@@ -292,14 +311,21 @@ export default function Home() {
             <div className="p-8 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl flex flex-col">
               <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><History className="text-indigo-400" /> Archivio Studi</h3>
               <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                {history.length === 0 ? <div className="flex items-center justify-center h-full opacity-40 italic">Nessun documento salvato.</div> : 
-                  history.filter(h => h.type === 'summary').map((h, i) => (
-                    <div key={i} onClick={() => loadFromHistory(h)} className="p-5 rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 cursor-pointer transition-all group">
-                      <div className="font-bold text-white group-hover:text-indigo-300 transition-colors line-clamp-1">{h.chapter_title}</div>
-                      <div className="text-xs opacity-50 uppercase tracking-widest mt-2">{h.pdf_name}</div>
+                {Object.keys(groupedHistory).length === 0 ? (
+                  <div className="flex items-center justify-center h-full opacity-40 italic">Nessun documento salvato.</div>
+                ) : (
+                  Object.entries(groupedHistory).map(([pdfName, caps]: [string, any], i) => (
+                    <div key={i} onClick={() => loadFromHistory(pdfName)} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/50 hover:bg-white/10 cursor-pointer transition-all group flex flex-col gap-2">
+                      <div className="font-bold text-white group-hover:text-indigo-300 transition-colors line-clamp-2 leading-snug flex items-start gap-3">
+                        <FileText className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                        {pdfName}
+                      </div>
+                      <div className="text-xs opacity-50 uppercase tracking-widest pl-8 font-medium text-blue-300">
+                        {caps.length} Capitoli Analizzati
+                      </div>
                     </div>
                   ))
-                }
+                )}
               </div>
             </div>
           </div>
