@@ -25,29 +25,36 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const pdfPart = { inlineData: { data: Buffer.from(bytes).toString('base64'), mimeType: "application/pdf" } };
 
-    // FASE 1: INDICE (PULIZIA TOTALE)
+    // FASE 1: INDICE
     if (action === 'outline') {
       const model = genAI.getGenerativeModel({ 
         model: "gemini-3.1-flash-lite-preview",
         generationConfig: { responseMimeType: "application/json" }
       });
-      
-      const prompt = `Analizza l'indice di questo PDF. 
-      Restituisci un JSON con questa struttura esatta: 
-      {"capitoli": [{"titolo": "Titolo", "paginaInizio": 1}]}`;
-      
+      const prompt = `Analizza l'indice di questo PDF. Restituisci ESCLUSIVAMENTE un JSON con questa struttura esatta (TUTTO MINUSCOLO): {"capitoli": [{"titolo": "Titolo", "paginaInizio": 1}]}`;
       const res = await model.generateContent([prompt, pdfPart]);
-      const rawJson = res.response.text();
-      
-      // Pulizia di emergenza se l'IA aggiunge ```json o altro
-      const cleanJson = rawJson.replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
-      return NextResponse.json(JSON.parse(cleanJson));
+      let cleanJson = res.response.text().replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+
+      let parsedData;
+      try {
+        parsedData = JSON.parse(cleanJson);
+      } catch(e) {
+        parsedData = JSON.parse(cleanJson.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
+      }
+
+      // Normalizzatore Indice (gestisce eventuali Maiuscole)
+      const capitoliNormalizzati = (parsedData.capitoli || parsedData.Capitoli || []).map((c: any) => ({
+         titolo: c.titolo || c.Titolo || "Capitolo Senza Titolo",
+         paginaInizio: c.paginaInizio || c.PaginaInizio || c.pagina || c.Pagina || 1
+      }));
+
+      return NextResponse.json({ capitoli: capitoliNormalizzati });
     }
 
     // FASE 2: DISPENSA
     if (action === 'chapter') {
       const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-      const prompt = `Sei un professore. Scrivi una dispensa ESAUSTIVA su: ${focus}. Usa Markdown e LaTeX ($..$) per le formule.`;
+      const prompt = `Sei un professore. Scrivi una dispensa ESAUSTIVA su: ${focus}. Usa Markdown e LaTeX ($..$) per le formule. NO documenti .tex.`;
       const result = await model.generateContent([prompt, pdfPart]);
       const content = result.response.text();
 
@@ -55,18 +62,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ riassunto: content });
     }
 
-    // FASE 3: TEST
+    // FASE 3: TEST (CON NORMALIZZATORE ESTREMO)
     if (action === 'generate_qa') {
       const modelJSON = genAI.getGenerativeModel({ 
         model: "gemini-3.1-flash-lite-preview",
         generationConfig: { responseMimeType: "application/json" }
       });
-      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. JSON: {"flashcards": [...], "quiz": [...]}`;
+      const prompt = `Crea 10 flashcards e 10 quiz per: ${focus}. Devi usare ESCLUSIVAMENTE chiavi in MINUSCOLO. Struttura: {"flashcards": [{"domanda": "...", "risposta": "..."}], "quiz": [{"domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": 0, "spiegazione": "..."}]}`;
       const result = await modelJSON.generateContent([prompt, pdfPart]);
-      const cleanQA = result.response.text().replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+      
+      const rawText = result.response.text();
+      const cleanQA = rawText.replace(/^```json\s*/gi, '').replace(/```\s*$/g, '').trim();
+      
+      let parsedQA;
+      try {
+         parsedQA = JSON.parse(cleanQA);
+      } catch (e) {
+         parsedQA = JSON.parse(cleanQA.replace(/\\(?!["\\/bfnrt])/g, "\\\\"));
+      }
 
-      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: cleanQA, type: 'qa' }]);
-      return NextResponse.json(JSON.parse(cleanQA));
+      // IL TRADUTTORE: Qualsiasi cosa scriva Gemini, noi la forziamo in minuscolo perfetto per React
+      const normalizedData = {
+        flashcards: (parsedQA.flashcards || parsedQA.Flashcards || []).map((f: any) => ({
+          domanda: f.domanda || f.Domanda || f.question || f.Question || "Domanda mancante dall'IA",
+          risposta: f.risposta || f.Risposta || f.answer || f.Answer || "Risposta mancante dall'IA"
+        })),
+        quiz: (parsedQA.quiz || parsedQA.Quiz || []).map((q: any) => ({
+          domanda: q.domanda || q.Domanda || q.question || "Domanda mancante dall'IA",
+          opzioni: q.opzioni || q.Opzioni || q.options || ["A", "B", "C", "D"],
+          corretta: q.corretta !== undefined ? q.corretta : (q.Corretta !== undefined ? q.Corretta : 0),
+          spiegazione: q.spiegazione || q.Spiegazione || q.explanation || ""
+        }))
+      };
+
+      await supabase.from('study_data').insert([{ user_id: userId, pdf_name: pdfName, chapter_title: focus, content: JSON.stringify(normalizedData), type: 'qa' }]);
+      return NextResponse.json(normalizedData);
     }
 
     return NextResponse.json({ error: "Azione non valida" });
