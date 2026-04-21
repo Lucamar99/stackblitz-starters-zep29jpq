@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
   Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers, ZoomIn, ZoomOut,
-  MessageCircle, Send // <- NUOVE ICONE AGGIUNTE QUI
+  MessageCircle, Send
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -69,14 +69,12 @@ export default function Home() {
   const [viewerWidth, setViewerWidth] = useState(0);
   const [inlineViewerWidth, setInlineViewerWidth] = useState(0);
 
-  // NUOVI STATI PER LA CHAT
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{role: 'user'|'model', text: string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // Effetto per autoscroll della chat
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   }, [chatMessages, isChatLoading]);
@@ -318,7 +316,9 @@ export default function Home() {
     }
   };
 
-  // NUOVA FUNZIONE: Invia Messaggio alla Chat IA
+  // ==========================================
+  // LA FUNZIONE CHAT ORA CAPISCE IL CONTESTO!
+  // ==========================================
   const sendChatMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || !apiKey) {
@@ -331,11 +331,22 @@ export default function Home() {
     setChatInput('');
     setIsChatLoading(true);
 
+    // Crea il contesto da inviare al server in base a cosa l'utente sta guardando
+    let currentContext = "";
+    if (chapters.length > 0) {
+      if (expandedChapter !== null && chapters[expandedChapter]) {
+        currentContext = `L'utente sta studiando il capitolo intitolato: "${chapters[expandedChapter].titolo}".\nEcco il testo del capitolo a sua disposizione:\n\n${chapters[expandedChapter].testo}`;
+      } else {
+        currentContext = `L'utente ha aperto un documento con questi capitoli: ${chapters.map(c => c.titolo).join(', ')}. Attualmente ha la visuale generale dell'indice.`;
+      }
+    }
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages, apiKey })
+        // Aggiungo la variabile currentContext nel body!
+        body: JSON.stringify({ messages: newMessages, apiKey, context: currentContext })
       });
       const data = await res.json();
       
@@ -475,7 +486,6 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 rounded-[2.5rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden">
                     <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                        <span className="font-bold flex items-center gap-3 text-white">
@@ -512,7 +522,6 @@ export default function Home() {
                     </div>
                  </div>
 
-                 {/* COLONNA DESTRA */}
                  <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
                      {chapters.map((cap: any, idx: number) => (
                         <div key={idx} className="rounded-[2.5rem] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden transition-all">
