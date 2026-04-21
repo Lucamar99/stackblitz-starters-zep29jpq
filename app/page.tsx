@@ -316,9 +316,6 @@ export default function Home() {
     }
   };
 
-  // ==========================================
-  // LA FUNZIONE CHAT ORA CAPISCE IL CONTESTO!
-  // ==========================================
   const sendChatMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || !apiKey) {
@@ -331,7 +328,6 @@ export default function Home() {
     setChatInput('');
     setIsChatLoading(true);
 
-    // Crea il contesto da inviare al server in base a cosa l'utente sta guardando
     let currentContext = "";
     if (chapters.length > 0) {
       if (expandedChapter !== null && chapters[expandedChapter]) {
@@ -345,7 +341,6 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Aggiungo la variabile currentContext nel body!
         body: JSON.stringify({ messages: newMessages, apiKey, context: currentContext })
       });
       const data = await res.json();
@@ -354,7 +349,17 @@ export default function Home() {
       
       setChatMessages([...newMessages, { role: 'model', text: data.reply }]);
     } catch (err: any) {
-      setChatMessages([...newMessages, { role: 'model', text: "Scusa, c'è stato un errore: " + err.message }]);
+      // MAGIA QUI: Filtro gli errori tecnici brutti da vedere
+      const rawError = err.message || "";
+      let friendlyError = "Scusa, si è verificato un errore imprevisto. 🔧";
+      
+      if (rawError.includes("503") || rawError.includes("high demand") || rawError.includes("overloaded")) {
+         friendlyError = "I miei server sono temporaneamente sovraccarichi per la troppa affluenza! ⏳ Riprova tra un minuto, sarò pronto ad aiutarti.";
+      } else if (rawError.includes("API Key") || rawError.includes("401")) {
+         friendlyError = "Sembra ci sia un problema con la tua API Key di Google. Sicuro sia corretta? 🔑";
+      }
+
+      setChatMessages([...newMessages, { role: 'model', text: friendlyError }]);
     }
     setIsChatLoading(false);
   };
@@ -760,7 +765,6 @@ export default function Home() {
             )}
           </AnimatePresence>
 
-          {/* BOTTONE FLUTTUANTE (FAB) */}
           <button 
             onClick={() => setChatOpen(!chatOpen)}
             className="w-14 h-14 bg-gradient-to-br from-blue-500/80 to-indigo-600/80 hover:from-blue-400 hover:to-indigo-500 backdrop-blur-3xl rounded-full flex items-center justify-center text-white shadow-[0_8px_32px_0_rgba(37,99,235,0.4)] border-t border-l border-white/30 transition-all hover:scale-105 active:scale-95"
