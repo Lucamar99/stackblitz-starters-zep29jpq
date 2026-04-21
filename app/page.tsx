@@ -26,8 +26,8 @@ const RenderMarkdown = ({ content }: { content: string }) => {
         remarkPlugins={[remarkGfm, remarkMath]} 
         rehypePlugins={[rehypeKatex]}
         components={{
-          h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-white mt-12 mb-6 border-l-4 border-blue-400/50 pl-4" {...props} />,
-          h3: ({node, ...props}) => <h3 className="text-xl font-bold text-white/90 mt-8 mb-4" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-2xl font-bold text-blue-300 mt-12 mb-6 border-l-4 border-blue-400/50 pl-4" {...props} />,
+          h3: ({node, ...props}) => <h3 className="text-xl font-bold text-white mt-8 mb-4" {...props} />,
           p: ({node, ...props}) => <p className="text-lg leading-relaxed mb-6 text-white/80 text-justify font-light" {...props} />,
           strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
           blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-white/30 pl-6 my-8 text-white/60 italic bg-white/5 py-3 pr-4 rounded-r-2xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]" {...props} />,
@@ -169,7 +169,7 @@ export default function Home() {
     localStorage.setItem('study_buddy_api_key', apiKey);
 
     try {
-      setLoadingStatus("Analisi dell'indice...");
+      setLoadingStatus("Fase 1: Analisi dell'indice...");
       const form = new FormData();
       form.append('file', file);
       form.append('apiKey', apiKey);
@@ -195,7 +195,7 @@ export default function Home() {
       for (let i = 0; i < outlineData.capitoli.length; i++) {
         const cap = outlineData.capitoli[i];
         const nextCap = outlineData.capitoli[i+1];
-        setLoadingStatus(`Dispensa - ${cap.titolo}`);
+        setLoadingStatus(`Fase 2: Dispensa - ${cap.titolo}`);
 
         let start = Math.max(0, parseInt(cap.paginaInizio) - 1);
         let end = nextCap ? parseInt(nextCap.paginaInizio) - 2 : totalPages - 1;
@@ -294,7 +294,6 @@ export default function Home() {
   if (!isSignedIn) {
     return (
       <div className="min-h-screen bg-[#050508] text-white flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-        {/* Background dinamico per il vetro liquido */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
            <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-blue-600/30 blur-[140px] rounded-full mix-blend-screen" />
            <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-purple-600/20 blur-[140px] rounded-full mix-blend-screen" />
@@ -319,7 +318,6 @@ export default function Home() {
       
       {/* BACKGROUND LUMINOSO PER IL VETRO LIQUIDO */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        {/* Blob animati per creare riflessi dinamici sul vetro */}
         <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-blue-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '12s' }} />
         <div className="absolute top-[30%] left-[40%] w-[40vw] h-[40vw] bg-teal-500/10 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '10s' }} />
@@ -337,9 +335,12 @@ export default function Home() {
             {pdfUrl && chapters.length > 0 && (
               <button onClick={() => setShowPdfModal(true)} className="flex lg:hidden px-4 py-2 rounded-full text-sm font-medium bg-white/5 backdrop-blur-[40px] border border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] text-white hover:bg-white/10 transition-all items-center gap-2"><Layers className="w-4 h-4" /> Vedi PDF</button>
             )}
-            <div className="p-1 bg-white/5 backdrop-blur-[40px] border border-white/20 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+            
+            {/* QUI HO FORZATO IL CONTENITORE DEL CLERK BUTTON A UN QUADRATO PERFETTO! */}
+            <div className="w-11 h-11 flex items-center justify-center bg-white/5 backdrop-blur-[40px] border border-white/20 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-9 h-9 rounded-full" } }} />
             </div>
+
           </div>
         </header>
 
