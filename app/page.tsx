@@ -182,6 +182,13 @@ export default function Home() {
       form.append('pdfName', file.name);
 
       const outlineRes = await fetch('/api/study', { method: 'POST', body: form });
+      
+      // NUOVO: Salvavita per il limite dei 4.5MB di Vercel
+      if (!outlineRes.ok) {
+        if (outlineRes.status === 413) throw new Error("Il PDF supera il limite di 4.5MB. Comprimilo con iLovePDF e riprova!");
+        throw new Error("Errore di connessione al server.");
+      }
+
       const outlineData = await outlineRes.json();
       
       if (outlineData.error) throw new Error(outlineData.error);
@@ -220,6 +227,12 @@ export default function Home() {
         if (currentPdfUrl) formData.append('pdfUrl', currentPdfUrl);
 
         const capRes = await fetch('/api/study', { method: 'POST', body: formData });
+        
+        // NUOVO: Salvavita di sicurezza
+        if (!capRes.ok) {
+           throw new Error(capRes.status === 413 ? "Un capitolo è troppo pesante (limite 4.5MB)." : "Errore durante l'elaborazione del capitolo.");
+        }
+
         const capData = await capRes.json();
         
         currentChapters.push({ 
@@ -259,6 +272,13 @@ export default function Home() {
       if (pdfUrl) formData.append('pdfUrl', pdfUrl);
 
       const res = await fetch('/api/study', { method: 'POST', body: formData });
+      
+      // NUOVO: Salvavita di sicurezza
+      if (!res.ok) {
+         if (res.status === 413) throw new Error("Il file è troppo grande per generare i test (limite 4.5MB).");
+         throw new Error("Errore di connessione al server.");
+      }
+
       const qa = await res.json();
       
       if (qa.error || !qa.flashcards || !qa.quiz) {
@@ -272,7 +292,7 @@ export default function Home() {
       newChapters[idx].quiz = qa.quiz;
       setChapters(newChapters);
       loadHistory();
-    } catch (e) { alert("Errore di connessione durante la generazione dei test."); }
+    } catch (e: any) { alert(e.message || "Errore di connessione durante la generazione dei test."); }
     setGeneratingQA(null);
   };
 
@@ -445,8 +465,7 @@ export default function Home() {
                        </div>
                     </div>
 
-                    {/* LA MAGIA È QUI: rimosso flex-center, aggiunto w-max mx-auto nel Document */}
-                    <div className="flex-1 overflow-auto custom-scrollbar pt-6 pb-6 bg-transparent">
+                    <div className="flex-1 overflow-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
                        {pdfUrl && inlineViewerWidth > 0 ? (
                           <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-8 h-8 animate-spin text-white opacity-30" /></div>} className="w-max mx-auto flex flex-col items-center">
                              <AnimatePresence mode="wait">
@@ -627,12 +646,11 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                {/* LA MAGIA È QUI (Mobile): rimosso flex-center, aggiunto w-max mx-auto nel Document */}
-                <div className="flex-1 w-full bg-transparent relative overflow-auto pb-24 pt-6 custom-scrollbar">
+                <div className="flex-1 w-full bg-transparent relative overflow-auto flex justify-center items-start pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-10 h-10 animate-spin text-white/50" /></div>} className="w-max mx-auto flex flex-col items-center">
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5">
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5 min-w-min">
                               <Page pageNumber={pageNumber} width={viewerWidth - 32} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                            </motion.div>
                         </AnimatePresence>
