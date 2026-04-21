@@ -349,7 +349,6 @@ export default function Home() {
       
       setChatMessages([...newMessages, { role: 'model', text: data.reply }]);
     } catch (err: any) {
-      // MAGIA QUI: Filtro gli errori tecnici brutti da vedere
       const rawError = err.message || "";
       let friendlyError = "Scusa, si è verificato un errore imprevisto. 🔧";
       
@@ -734,7 +733,16 @@ export default function Home() {
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600/40 text-white rounded-br-sm shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] border border-blue-400/20' : 'bg-white/5 text-gray-200 rounded-bl-sm border border-white/5'}`}>
-                        <ReactMarkdown className="prose prose-invert prose-sm max-w-none">{msg.text}</ReactMarkdown>
+                        
+                        {/* MAGIA QUI: AGGIUNTI I PLUGIN PER LEGGERE IL LATEX NELLA CHAT */}
+                        <ReactMarkdown 
+                          className="prose prose-invert prose-sm max-w-none"
+                          remarkPlugins={[remarkGfm, remarkMath]} 
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {msg.text}
+                        </ReactMarkdown>
+                        
                       </div>
                     </div>
                   ))}
