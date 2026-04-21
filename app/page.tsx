@@ -63,7 +63,7 @@ export default function Home() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [pdfScale, setPdfScale] = useState(1); // Stato per lo Zoom
+  const [pdfScale, setPdfScale] = useState(1); 
   
   const [viewerWidth, setViewerWidth] = useState(0);
   const [inlineViewerWidth, setInlineViewerWidth] = useState(0);
@@ -83,7 +83,6 @@ export default function Home() {
     }
   }, [isSignedIn]);
 
-  // Resetta lo zoom quando si cambia PDF
   useEffect(() => {
     setPdfScale(1);
   }, [pdfUrl]);
@@ -420,16 +419,16 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: Visualizzatore PDF (The Glass Pane) */}
+                 {/* COLONNA SINISTRA: Visualizzatore PDF */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 rounded-[2.5rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden">
                     
-                    <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                    <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                        <span className="font-bold flex items-center gap-3 text-white">
                           <div className="p-2 bg-white/5 rounded-xl border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"><FileText className="w-4 h-4 text-white/80"/></div>
                           <span className="truncate max-w-[150px] xl:max-w-[200px] text-sm tracking-wide font-medium">{file?.name || "Documento"}</span>
                        </span>
                        <div className="flex items-center gap-4">
-                           {/* NUOVO: CONTROLLI DELLO ZOOM */}
+                           {/* ZOOM CONTROLS */}
                            <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
                               <button onClick={() => setPdfScale(s => Math.max(0.5, s - 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomOut className="w-4 h-4"/></button>
                               <span className="font-mono text-xs font-bold text-white/70 px-1 w-10 text-center">{Math.round(pdfScale * 100)}%</span>
@@ -446,10 +445,10 @@ export default function Home() {
                        </div>
                     </div>
 
-                    {/* Aggiunto overflow-auto per supportare lo scroll orizzontale in caso di zoom */}
-                    <div className="flex-1 overflow-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
+                    {/* LA MAGIA È QUI: rimosso flex-center, aggiunto w-max mx-auto nel Document */}
+                    <div className="flex-1 overflow-auto custom-scrollbar pt-6 pb-6 bg-transparent">
                        {pdfUrl && inlineViewerWidth > 0 ? (
-                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-8 h-8 animate-spin text-white mt-32 opacity-30" />}>
+                          <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-8 h-8 animate-spin text-white opacity-30" /></div>} className="w-max mx-auto flex flex-col items-center">
                              <AnimatePresence mode="wait">
                                <motion.div 
                                   key={pageNumber} 
@@ -457,15 +456,14 @@ export default function Home() {
                                   animate={{ opacity: 1, scale: 1 }} 
                                   exit={{ opacity: 0, scale: 0.98 }} 
                                   transition={{ duration: 0.15 }} 
-                                  className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 min-w-min"
+                                  className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5"
                                >
-                                  {/* Aggiunto il prop scale */}
                                   <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
                           </Document>
                        ) : (
-                          <div className="mt-32 text-white/30 text-sm font-light">Preparazione lettore...</div>
+                          <div className="mt-32 text-center text-white/30 text-sm font-light w-full">Preparazione lettore...</div>
                        )}
                     </div>
                  </div>
@@ -629,12 +627,12 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                {/* Aggiunto overflow-auto e min-w-min per scroll orizzontale */}
-                <div className="flex-1 w-full bg-transparent relative overflow-auto flex justify-center items-start pb-24 pt-6 custom-scrollbar">
+                {/* LA MAGIA È QUI (Mobile): rimosso flex-center, aggiunto w-max mx-auto nel Document */}
+                <div className="flex-1 w-full bg-transparent relative overflow-auto pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
-                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-10 h-10 animate-spin text-white/50 mt-32" />}>
+                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-10 h-10 animate-spin text-white/50" /></div>} className="w-max mx-auto flex flex-col items-center">
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5 min-w-min">
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5">
                               <Page pageNumber={pageNumber} width={viewerWidth - 32} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                            </motion.div>
                         </AnimatePresence>
