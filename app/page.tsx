@@ -5,7 +5,7 @@ import { UserButton, SignInButton, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
-  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers
+  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers, ZoomIn, ZoomOut
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -63,6 +63,7 @@ export default function Home() {
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [pdfScale, setPdfScale] = useState(1); // Stato per lo Zoom
   
   const [viewerWidth, setViewerWidth] = useState(0);
   const [inlineViewerWidth, setInlineViewerWidth] = useState(0);
@@ -81,6 +82,11 @@ export default function Home() {
       if (savedKey) setApiKey(savedKey);
     }
   }, [isSignedIn]);
+
+  // Resetta lo zoom quando si cambia PDF
+  useEffect(() => {
+    setPdfScale(1);
+  }, [pdfUrl]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -336,7 +342,6 @@ export default function Home() {
               <button onClick={() => setShowPdfModal(true)} className="flex lg:hidden px-4 py-2 rounded-full text-sm font-medium bg-white/5 backdrop-blur-[40px] border border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] text-white hover:bg-white/10 transition-all items-center gap-2"><Layers className="w-4 h-4" /> Vedi PDF</button>
             )}
             
-            {/* QUI HO FORZATO IL CONTENITORE DEL CLERK BUTTON A UN QUADRATO PERFETTO! */}
             <div className="w-11 h-11 flex items-center justify-center bg-white/5 backdrop-blur-[40px] border border-white/20 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-9 h-9 rounded-full" } }} />
             </div>
@@ -418,21 +423,31 @@ export default function Home() {
                  {/* COLONNA SINISTRA: Visualizzatore PDF (The Glass Pane) */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 rounded-[2.5rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden">
                     
-                    <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                    <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                        <span className="font-bold flex items-center gap-3 text-white">
                           <div className="p-2 bg-white/5 rounded-xl border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"><FileText className="w-4 h-4 text-white/80"/></div>
-                          <span className="truncate max-w-[200px] xl:max-w-[300px] text-sm tracking-wide font-medium">{file?.name || "Documento"}</span>
+                          <span className="truncate max-w-[150px] xl:max-w-[200px] text-sm tracking-wide font-medium">{file?.name || "Documento"}</span>
                        </span>
-                       {numPages && (
-                         <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
-                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-white/50 hover:text-white"><ChevronLeft className="w-4 h-4"/></button>
-                            <span className="font-mono text-xs font-bold text-white/70 px-2">{pageNumber} / {numPages}</span>
-                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-white/50 hover:text-white"><ChevronRight className="w-4 h-4"/></button>
-                         </div>
-                       )}
+                       <div className="flex items-center gap-4">
+                           {/* NUOVO: CONTROLLI DELLO ZOOM */}
+                           <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+                              <button onClick={() => setPdfScale(s => Math.max(0.5, s - 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomOut className="w-4 h-4"/></button>
+                              <span className="font-mono text-xs font-bold text-white/70 px-1 w-10 text-center">{Math.round(pdfScale * 100)}%</span>
+                              <button onClick={() => setPdfScale(s => Math.min(3, s + 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomIn className="w-4 h-4"/></button>
+                           </div>
+
+                           {numPages && (
+                             <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+                                <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-white/50 hover:text-white"><ChevronLeft className="w-4 h-4"/></button>
+                                <span className="font-mono text-xs font-bold text-white/70 px-2">{pageNumber} / {numPages}</span>
+                                <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-white/50 hover:text-white"><ChevronRight className="w-4 h-4"/></button>
+                             </div>
+                           )}
+                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
+                    {/* Aggiunto overflow-auto per supportare lo scroll orizzontale in caso di zoom */}
+                    <div className="flex-1 overflow-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
                        {pdfUrl && inlineViewerWidth > 0 ? (
                           <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-8 h-8 animate-spin text-white mt-32 opacity-30" />}>
                              <AnimatePresence mode="wait">
@@ -442,9 +457,10 @@ export default function Home() {
                                   animate={{ opacity: 1, scale: 1 }} 
                                   exit={{ opacity: 0, scale: 0.98 }} 
                                   transition={{ duration: 0.15 }} 
-                                  className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5"
+                                  className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 min-w-min"
                                >
-                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} renderTextLayer={false} renderAnnotationLayer={false} />
+                                  {/* Aggiunto il prop scale */}
+                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
                           </Document>
@@ -595,26 +611,31 @@ export default function Home() {
           {showPdfModal && pdfUrl && (
             <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-4 bg-black/40 backdrop-blur-[30px]">
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full h-full max-w-5xl rounded-[2.5rem] overflow-hidden bg-white/[0.04] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] flex flex-col shadow-[0_30px_80px_rgba(0,0,0,0.8)] backdrop-blur-[80px]">
-                <div className="p-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                  <span className="font-bold flex items-center gap-3 text-white tracking-tight">
-                    <div className="p-2 bg-white/10 rounded-lg border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"><FileText className="w-4 h-4 text-white"/></div>
-                    <span>Lettore PDF</span>
-                  </span>
+                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                  
+                  {/* ZOOM CONTROLS MOBILE */}
+                  <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
+                     <button onClick={() => setPdfScale(s => Math.max(0.5, s - 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomOut className="w-4 h-4"/></button>
+                     <span className="font-mono text-xs font-bold text-white/70 px-1 w-10 text-center">{Math.round(pdfScale * 100)}%</span>
+                     <button onClick={() => setPdfScale(s => Math.min(3, s + 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomIn className="w-4 h-4"/></button>
+                  </div>
+
                   <div className="flex items-center gap-3">
-                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="px-4 py-2 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-colors flex items-center gap-2 font-medium text-sm text-white">
-                      <Download className="w-4 h-4" /> <span className="hidden sm:inline">Scarica</span>
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="p-2.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-colors text-white">
+                      <Download className="w-5 h-5" />
                     </a>
                     <button onClick={() => setShowPdfModal(false)} className="p-2.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-colors text-white">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-transparent relative overflow-y-auto flex justify-center pb-24 pt-6 custom-scrollbar">
+                {/* Aggiunto overflow-auto e min-w-min per scroll orizzontale */}
+                <div className="flex-1 w-full bg-transparent relative overflow-auto flex justify-center items-start pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
-                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-10 h-10 animate-spin text-white/50 mt-32" />} className="flex flex-col items-center">
+                     <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<Loader2 className="w-10 h-10 animate-spin text-white/50 mt-32" />}>
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5">
-                              <Page pageNumber={pageNumber} width={viewerWidth - 32} renderTextLayer={false} renderAnnotationLayer={false} />
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5 min-w-min">
+                              <Page pageNumber={pageNumber} width={viewerWidth - 32} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                            </motion.div>
                         </AnimatePresence>
                      </Document>
@@ -639,7 +660,7 @@ export default function Home() {
         .backface-hidden { backface-visibility: hidden; }
         .rotate-y-180 { transform: rotateY(180deg); }
         .prose p { margin-bottom: 0 !important; margin-top: 0 !important; }
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
