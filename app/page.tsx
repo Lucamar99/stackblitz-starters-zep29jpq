@@ -13,7 +13,10 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { PDFDocument } from 'pdf-lib';
+
 import 'katex/dist/katex.min.css';
+// Importo lo stile nativo per rendere il testo del PDF selezionabile e allineato correttamente
+import 'react-pdf/dist/Page/TextLayer.css'; 
 
 import dynamic from 'next/dynamic';
 const Document = dynamic(() => import('react-pdf').then((mod) => mod.Document), { ssr: false });
@@ -74,6 +77,25 @@ export default function Home() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // NUOVO: Stato per gestire il testo selezionato
+  const [selectedText, setSelectedText] = useState('');
+
+  // NUOVO: Ascoltatore globale per la selezione del testo
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      if (text && text.length > 0) {
+        setSelectedText(text);
+      } else {
+        setSelectedText('');
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, []);
 
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
@@ -363,6 +385,14 @@ export default function Home() {
     setIsChatLoading(false);
   };
 
+  // NUOVO: Funzione per gestire il click sul bottone "Spiega Testo"
+  const handleAskAboutSelection = () => {
+    setChatInput(`Spiegami in modo dettagliato questo passaggio:\n\n"${selectedText}"`);
+    setChatOpen(true);
+    setSelectedText('');
+    window.getSelection()?.removeAllRanges(); // Deseleziona il testo dopo averlo catturato
+  };
+
   const groupedHistory = history.reduce((acc: any, curr: any) => {
     if (curr.type === 'summary') {
       if (!acc[curr.pdf_name]) acc[curr.pdf_name] = [];
@@ -396,6 +426,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#050508] text-white font-sans pb-20 relative selection:bg-blue-500/30">
       
+      {/* BACKGROUND LUMINOSO PER IL VETRO LIQUIDO */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-blue-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '12s' }} />
@@ -422,6 +453,7 @@ export default function Home() {
           </div>
         </header>
 
+        {/* CARICAMENTO */}
         {loading && (
            <div className="mb-8 p-12 rounded-[3rem] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex flex-col items-center justify-center text-center space-y-6">
               <div className="p-5 bg-white/5 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-white/10">
@@ -434,6 +466,7 @@ export default function Home() {
            </div>
         )}
 
+        {/* HOME */}
         {!loading && chapters.length === 0 && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-8 rounded-[2.5rem] bg-white/[0.04] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-6 transition-all hover:bg-white/[0.06]">
@@ -481,6 +514,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* RISULTATI: LAYOUT SPLIT-SCREEN LIQUID GLASS */}
         {!loading && chapters.length > 0 && (
           <div className="flex flex-col w-full">
              
@@ -490,6 +524,7 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
+                 {/* COLONNA SINISTRA: Visualizzatore PDF */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 rounded-[2.5rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden">
                     <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                        <span className="font-bold flex items-center gap-3 text-white">
@@ -511,12 +546,13 @@ export default function Home() {
                            )}
                        </div>
                     </div>
-                    <div className="flex-1 overflow-auto custom-scrollbar pt-6 pb-6 bg-transparent">
+                    <div className="flex-1 overflow-auto custom-scrollbar pt-6 pb-6 bg-transparent relative">
                        {pdfUrl && inlineViewerWidth > 0 ? (
                           <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-8 h-8 animate-spin text-white opacity-30" /></div>} className="w-max mx-auto flex flex-col items-center">
                              <AnimatePresence mode="wait">
-                               <motion.div key={pageNumber} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.15 }} className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5">
-                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
+                               <motion.div key={pageNumber} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.15 }} className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5 relative">
+                                  {/* NUOVO: renderTextLayer=true per permettere la selezione del testo dal PDF originale */}
+                                  <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} scale={pdfScale} renderTextLayer={true} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
                           </Document>
@@ -526,6 +562,7 @@ export default function Home() {
                     </div>
                  </div>
 
+                 {/* COLONNA DESTRA */}
                  <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
                      {chapters.map((cap: any, idx: number) => (
                         <div key={idx} className="rounded-[2.5rem] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden transition-all">
@@ -540,7 +577,7 @@ export default function Home() {
                             <AnimatePresence>
                                 {expandedChapter === idx && (
                                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="px-6 md:px-10 pb-10">
-                                        <div className="border-t border-white/5 pt-8">
+                                        <div className="border-t border-white/5 pt-8 relative">
                                             <RenderMarkdown content={cap.testo} />
                                             
                                             <div className="mt-16 p-8 md:p-10 rounded-[2.5rem] bg-white/[0.02] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] flex flex-col items-center text-center space-y-6 relative overflow-hidden backdrop-blur-[20px]">
@@ -683,8 +720,9 @@ export default function Home() {
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-10 h-10 animate-spin text-white/50" /></div>} className="w-max mx-auto flex flex-col items-center">
                         <AnimatePresence mode="wait">
-                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5 min-w-min">
-                              <Page pageNumber={pageNumber} width={viewerWidth - 32} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
+                           <motion.div key={pageNumber} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] mb-8 overflow-hidden bg-white/5 min-w-min relative">
+                              {/* NUOVO: renderTextLayer=true per il mobile */}
+                              <Page pageNumber={pageNumber} width={viewerWidth - 32} scale={pdfScale} renderTextLayer={true} renderAnnotationLayer={false} />
                            </motion.div>
                         </AnimatePresence>
                      </Document>
@@ -703,9 +741,26 @@ export default function Home() {
         </AnimatePresence>
 
         {/* ========================================================= */}
-        {/* WIDGET FLUTTUANTE CHAT AI (LIQUID GLASS)                   */}
+        {/* WIDGET FLUTTUANTE CHAT AI E BOTTONE SELEZIONE TESTO       */}
         {/* ========================================================= */}
         <div className="fixed bottom-6 right-6 z-[150] flex flex-col items-end gap-4">
+          
+          {/* NUOVO: BOTTONE FLUTTUANTE IN VETRO SE C'E' TESTO SELEZIONATO */}
+          <AnimatePresence>
+            {selectedText && !chatOpen && (
+              <motion.button
+                initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                onClick={handleAskAboutSelection}
+                className="mb-2 px-6 py-3 bg-gradient-to-r from-blue-500/80 to-indigo-600/80 hover:from-blue-400 hover:to-indigo-500 backdrop-blur-3xl border-t border-l border-white/30 shadow-[0_8px_32px_0_rgba(37,99,235,0.4)] rounded-full flex items-center justify-center text-white font-bold gap-3 transition-all hover:scale-105 active:scale-95"
+              >
+                <Sparkles className="w-5 h-5 drop-shadow-md" />
+                Spiega testo selezionato
+              </motion.button>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {chatOpen && (
               <motion.div 
@@ -727,14 +782,12 @@ export default function Home() {
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar" ref={chatScrollRef}>
                   {chatMessages.length === 0 && (
                     <div className="text-center text-white/40 text-sm font-light mt-auto mb-auto">
-                      Fammi una domanda sui tuoi appunti!
+                      Fammi una domanda o seleziona un testo!
                     </div>
                   )}
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600/40 text-white rounded-br-sm shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] border border-blue-400/20' : 'bg-white/5 text-gray-200 rounded-bl-sm border border-white/5'}`}>
-                        
-                        {/* MAGIA QUI: AGGIUNTI I PLUGIN PER LEGGERE IL LATEX NELLA CHAT */}
                         <ReactMarkdown 
                           className="prose prose-invert prose-sm max-w-none"
                           remarkPlugins={[remarkGfm, remarkMath]} 
@@ -742,7 +795,6 @@ export default function Home() {
                         >
                           {msg.text}
                         </ReactMarkdown>
-                        
                       </div>
                     </div>
                   ))}
@@ -782,6 +834,8 @@ export default function Home() {
         </div>
 
       </div>
+
+      {/* NUOVO: Stili CSS per rendere invisibile la grafica del testo PDF mantenendo la selezione blu scura */}
       <style dangerouslySetInnerHTML={{__html: `
         .perspective-2000 { perspective: 2000px; }
         .preserve-3d { transform-style: preserve-3d; }
@@ -792,6 +846,14 @@ export default function Home() {
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+        .react-pdf__Page__textContent {
+            color: transparent;
+        }
+        .react-pdf__Page__textContent ::selection {
+            background: rgba(59, 130, 246, 0.4);
+            color: transparent;
+        }
       `}} />
     </div>
   );
