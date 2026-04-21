@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserButton, SignInButton, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, UploadCloud, ChevronDown, FileText, Loader2, 
-  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers, ZoomIn, ZoomOut
+  Sparkles, BrainCircuit, History, ChevronLeft, ChevronRight, X, Download, Trash2, Layers, ZoomIn, ZoomOut,
+  MessageCircle, Send // <- NUOVE ICONE AGGIUNTE QUI
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -67,6 +68,18 @@ export default function Home() {
   
   const [viewerWidth, setViewerWidth] = useState(0);
   const [inlineViewerWidth, setInlineViewerWidth] = useState(0);
+
+  // NUOVI STATI PER LA CHAT
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{role: 'user'|'model', text: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Effetto per autoscroll della chat
+  useEffect(() => {
+    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+  }, [chatMessages, isChatLoading]);
 
   useEffect(() => {
     document.documentElement.classList.add('dark');
@@ -183,7 +196,6 @@ export default function Home() {
 
       const outlineRes = await fetch('/api/study', { method: 'POST', body: form });
       
-      // NUOVO: Salvavita per il limite dei 4.5MB di Vercel
       if (!outlineRes.ok) {
         if (outlineRes.status === 413) throw new Error("Il PDF supera il limite di 4.5MB. Comprimilo con iLovePDF e riprova!");
         throw new Error("Errore di connessione al server.");
@@ -228,7 +240,6 @@ export default function Home() {
 
         const capRes = await fetch('/api/study', { method: 'POST', body: formData });
         
-        // NUOVO: Salvavita di sicurezza
         if (!capRes.ok) {
            throw new Error(capRes.status === 413 ? "Un capitolo è troppo pesante (limite 4.5MB)." : "Errore durante l'elaborazione del capitolo.");
         }
@@ -273,7 +284,6 @@ export default function Home() {
 
       const res = await fetch('/api/study', { method: 'POST', body: formData });
       
-      // NUOVO: Salvavita di sicurezza
       if (!res.ok) {
          if (res.status === 413) throw new Error("Il file è troppo grande per generare i test (limite 4.5MB).");
          throw new Error("Errore di connessione al server.");
@@ -306,6 +316,36 @@ export default function Home() {
     } catch (err) {
       alert("Errore durante l'eliminazione.");
     }
+  };
+
+  // NUOVA FUNZIONE: Invia Messaggio alla Chat IA
+  const sendChatMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || !apiKey) {
+      if (!apiKey) alert("Inserisci prima l'API Key nella schermata principale.");
+      return;
+    }
+
+    const newMessages = [...chatMessages, { role: 'user' as const, text: chatInput }];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages, apiKey })
+      });
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      
+      setChatMessages([...newMessages, { role: 'model', text: data.reply }]);
+    } catch (err: any) {
+      setChatMessages([...newMessages, { role: 'model', text: "Scusa, c'è stato un errore: " + err.message }]);
+    }
+    setIsChatLoading(false);
   };
 
   const groupedHistory = history.reduce((acc: any, curr: any) => {
@@ -341,7 +381,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#050508] text-white font-sans pb-20 relative selection:bg-blue-500/30">
       
-      {/* BACKGROUND LUMINOSO PER IL VETRO LIQUIDO */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-blue-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '8s' }} />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-indigo-600/20 blur-[150px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '12s' }} />
@@ -368,7 +407,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* CARICAMENTO (Liquid Glass) */}
         {loading && (
            <div className="mb-8 p-12 rounded-[3rem] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex flex-col items-center justify-center text-center space-y-6">
               <div className="p-5 bg-white/5 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-white/10">
@@ -381,7 +419,6 @@ export default function Home() {
            </div>
         )}
 
-        {/* HOME: PURE LIQUID GLASS CARDS */}
         {!loading && chapters.length === 0 && (
           <div className="grid md:grid-cols-2 gap-8">
             <div className="p-8 rounded-[2.5rem] bg-white/[0.04] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] space-y-6 transition-all hover:bg-white/[0.06]">
@@ -429,7 +466,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* RISULTATI: LAYOUT SPLIT-SCREEN LIQUID GLASS */}
         {!loading && chapters.length > 0 && (
           <div className="flex flex-col w-full">
              
@@ -439,22 +475,19 @@ export default function Home() {
 
              <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
                  
-                 {/* COLONNA SINISTRA: Visualizzatore PDF */}
+                 {/* COLONNA SINISTRA */}
                  <div className="hidden lg:flex flex-col w-1/2 xl:w-[45%] sticky top-8 h-[calc(100vh-4rem)] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 rounded-[2.5rem] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden">
-                    
                     <div className="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                        <span className="font-bold flex items-center gap-3 text-white">
                           <div className="p-2 bg-white/5 rounded-xl border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"><FileText className="w-4 h-4 text-white/80"/></div>
                           <span className="truncate max-w-[150px] xl:max-w-[200px] text-sm tracking-wide font-medium">{file?.name || "Documento"}</span>
                        </span>
                        <div className="flex items-center gap-4">
-                           {/* ZOOM CONTROLS */}
                            <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
                               <button onClick={() => setPdfScale(s => Math.max(0.5, s - 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomOut className="w-4 h-4"/></button>
                               <span className="font-mono text-xs font-bold text-white/70 px-1 w-10 text-center">{Math.round(pdfScale * 100)}%</span>
                               <button onClick={() => setPdfScale(s => Math.min(3, s + 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomIn className="w-4 h-4"/></button>
                            </div>
-
                            {numPages && (
                              <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
                                 <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => Math.max(1, p - 1))} className="p-1.5 hover:bg-white/10 rounded-lg disabled:opacity-30 transition-all text-white/50 hover:text-white"><ChevronLeft className="w-4 h-4"/></button>
@@ -464,19 +497,11 @@ export default function Home() {
                            )}
                        </div>
                     </div>
-
-                    <div className="flex-1 overflow-auto custom-scrollbar flex justify-center items-start pt-6 pb-6 bg-transparent">
+                    <div className="flex-1 overflow-auto custom-scrollbar pt-6 pb-6 bg-transparent">
                        {pdfUrl && inlineViewerWidth > 0 ? (
                           <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-8 h-8 animate-spin text-white opacity-30" /></div>} className="w-max mx-auto flex flex-col items-center">
                              <AnimatePresence mode="wait">
-                               <motion.div 
-                                  key={pageNumber} 
-                                  initial={{ opacity: 0, scale: 0.98 }} 
-                                  animate={{ opacity: 1, scale: 1 }} 
-                                  exit={{ opacity: 0, scale: 0.98 }} 
-                                  transition={{ duration: 0.15 }} 
-                                  className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5"
-                               >
+                               <motion.div key={pageNumber} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.15 }} className="rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/5">
                                   <Page pageNumber={pageNumber} width={inlineViewerWidth - 48} scale={pdfScale} renderTextLayer={false} renderAnnotationLayer={false} />
                                </motion.div>
                              </AnimatePresence>
@@ -487,7 +512,7 @@ export default function Home() {
                     </div>
                  </div>
 
-                 {/* COLONNA DESTRA: Area di Studio (Glass Panels) */}
+                 {/* COLONNA DESTRA */}
                  <div className="w-full lg:w-1/2 xl:w-[55%] space-y-6">
                      {chapters.map((cap: any, idx: number) => (
                         <div key={idx} className="rounded-[2.5rem] bg-white/[0.03] backdrop-blur-[60px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden transition-all">
@@ -540,7 +565,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODALE Q&A (Liquid Glass) */}
+        {/* MODALE Q&A */}
         <AnimatePresence>
             {activeQA && chapters[activeQA.idx] && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -556,12 +581,10 @@ export default function Home() {
                                 <div className="flex flex-col items-center">
                                     <div onClick={() => setIsFlipped(!isFlipped)} className="w-full max-w-xl h-96 relative cursor-pointer perspective-2000 group">
                                         <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 100, damping: 20 }} className="w-full h-full preserve-3d">
-                                            {/* Fronte Carta Glass */}
                                             <div className="absolute inset-0 backface-hidden bg-white/[0.03] border border-white/10 rounded-[3rem] p-10 flex flex-col justify-center items-center text-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] shadow-[0_15px_35px_rgba(0,0,0,0.3)] backdrop-blur-3xl group-hover:bg-white/[0.06] transition-colors">
                                                 <span className="text-sm text-blue-300 font-bold uppercase tracking-[0.2em] mb-6 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]">Fronte - Domanda</span>
                                                 <div className="text-2xl font-bold text-white drop-shadow-md"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.domanda || ""} /></div>
                                             </div>
-                                            {/* Retro Carta Glass Colorata */}
                                             <div className="absolute inset-0 backface-hidden rotate-y-180 bg-blue-600/20 rounded-[3rem] p-10 flex flex-col justify-center items-center text-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.3)] shadow-[0_15px_35px_rgba(37,99,235,0.3)] border border-blue-400/30 backdrop-blur-[80px] overflow-y-auto custom-scrollbar">
                                                 <span className="text-sm text-white/70 font-bold uppercase tracking-[0.2em] mb-6 mt-auto">Retro - Risposta</span>
                                                 <div className="text-xl font-medium text-white mb-auto drop-shadow-md"><RenderMarkdown content={chapters[activeQA.idx].flashcards[cardIndex]?.risposta || ""} /></div>
@@ -623,20 +646,17 @@ export default function Home() {
             )}
         </AnimatePresence>
 
-        {/* MODALE PDF VIEWER MOBILE - Liquid Glass */}
+        {/* MODALE PDF VIEWER MOBILE */}
         <AnimatePresence>
           {showPdfModal && pdfUrl && (
             <div className="fixed inset-0 z-[100] flex lg:hidden items-center justify-center p-4 bg-black/40 backdrop-blur-[30px]">
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full h-full max-w-5xl rounded-[2.5rem] overflow-hidden bg-white/[0.04] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] flex flex-col shadow-[0_30px_80px_rgba(0,0,0,0.8)] backdrop-blur-[80px]">
                 <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-                  
-                  {/* ZOOM CONTROLS MOBILE */}
                   <div className="flex items-center gap-1 bg-black/20 rounded-xl p-1 border border-white/5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5)]">
                      <button onClick={() => setPdfScale(s => Math.max(0.5, s - 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomOut className="w-4 h-4"/></button>
                      <span className="font-mono text-xs font-bold text-white/70 px-1 w-10 text-center">{Math.round(pdfScale * 100)}%</span>
                      <button onClick={() => setPdfScale(s => Math.min(3, s + 0.25))} className="p-1.5 hover:bg-white/10 rounded-lg transition-all text-white/50 hover:text-white"><ZoomIn className="w-4 h-4"/></button>
                   </div>
-
                   <div className="flex items-center gap-3">
                     <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download={file?.name || "documento.pdf"} className="p-2.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] transition-colors text-white">
                       <Download className="w-5 h-5" />
@@ -646,7 +666,7 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 w-full bg-transparent relative overflow-auto flex justify-center items-start pb-24 pt-6 custom-scrollbar">
+                <div className="flex-1 w-full bg-transparent relative overflow-auto pb-24 pt-6 custom-scrollbar">
                    {viewerWidth > 0 && (
                      <Document file={pdfUrl} onLoadSuccess={({ numPages }) => { setNumPages(numPages); setPageNumber(1); }} loading={<div className="flex w-full justify-center mt-32"><Loader2 className="w-10 h-10 animate-spin text-white/50" /></div>} className="w-max mx-auto flex flex-col items-center">
                         <AnimatePresence mode="wait">
@@ -668,6 +688,77 @@ export default function Home() {
             </div>
           )}
         </AnimatePresence>
+
+        {/* ========================================================= */}
+        {/* WIDGET FLUTTUANTE CHAT AI (LIQUID GLASS)                   */}
+        {/* ========================================================= */}
+        <div className="fixed bottom-6 right-6 z-[150] flex flex-col items-end gap-4">
+          <AnimatePresence>
+            {chatOpen && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20, scale: 0.95 }} 
+                animate={{ opacity: 1, y: 0, scale: 1 }} 
+                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                className="w-80 sm:w-96 h-[500px] max-h-[70vh] bg-white/[0.04] backdrop-blur-[80px] border border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] shadow-[0_30px_80px_rgba(0,0,0,0.8)] rounded-3xl flex flex-col overflow-hidden"
+              >
+                <div className="p-4 border-b border-white/5 bg-white/[0.02] flex justify-between items-center shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-500/20 rounded-lg border border-white/10"><Sparkles className="w-4 h-4 text-blue-300" /></div>
+                    <span className="font-bold text-white tracking-tight text-sm">Tutor IA</span>
+                  </div>
+                  <button onClick={() => setChatOpen(false)} className="p-1.5 rounded-full hover:bg-white/10 transition-colors text-white/50 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar" ref={chatScrollRef}>
+                  {chatMessages.length === 0 && (
+                    <div className="text-center text-white/40 text-sm font-light mt-auto mb-auto">
+                      Fammi una domanda sui tuoi appunti!
+                    </div>
+                  )}
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600/40 text-white rounded-br-sm shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] border border-blue-400/20' : 'bg-white/5 text-gray-200 rounded-bl-sm border border-white/5'}`}>
+                        <ReactMarkdown className="prose prose-invert prose-sm max-w-none">{msg.text}</ReactMarkdown>
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-white/5 p-3 rounded-2xl rounded-bl-sm border border-white/5 flex gap-1">
+                        <motion.div animate={{y: [0, -5, 0]}} transition={{repeat: Infinity, duration: 0.6, delay: 0}} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                        <motion.div animate={{y: [0, -5, 0]}} transition={{repeat: Infinity, duration: 0.6, delay: 0.2}} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                        <motion.div animate={{y: [0, -5, 0]}} transition={{repeat: Infinity, duration: 0.6, delay: 0.4}} className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <form onSubmit={sendChatMessage} className="p-4 bg-black/20 border-t border-white/5 flex gap-2">
+                  <input 
+                    type="text" 
+                    value={chatInput} 
+                    onChange={e => setChatInput(e.target.value)} 
+                    placeholder="Chiedi qualcosa..." 
+                    className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 transition-all shadow-[inset_0_2px_5px_rgba(0,0,0,0.5)]"
+                  />
+                  <button type="submit" disabled={isChatLoading || !chatInput.trim()} className="p-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-white/5 disabled:text-white/30 text-white rounded-full transition-all shadow-[inset_0_1px_1px_rgba(255,255,255,0.3)]">
+                    <Send className="w-4 h-4" />
+                  </button>
+                </form>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* BOTTONE FLUTTUANTE (FAB) */}
+          <button 
+            onClick={() => setChatOpen(!chatOpen)}
+            className="w-14 h-14 bg-gradient-to-br from-blue-500/80 to-indigo-600/80 hover:from-blue-400 hover:to-indigo-500 backdrop-blur-3xl rounded-full flex items-center justify-center text-white shadow-[0_8px_32px_0_rgba(37,99,235,0.4)] border-t border-l border-white/30 transition-all hover:scale-105 active:scale-95"
+          >
+            {chatOpen ? <X className="w-6 h-6 drop-shadow-md" /> : <MessageCircle className="w-6 h-6 drop-shadow-md" />}
+          </button>
+        </div>
 
       </div>
       <style dangerouslySetInnerHTML={{__html: `
